@@ -368,11 +368,23 @@ function interpolate(input: string, data: Record<string, any>, prefixFallback?: 
 function getFieldByPath(schema: Field[], path: string): Field | undefined {
   const [first, ...rest] = path.split('.');
   const field = schema.find(f => f.name === first);
-  
-  return !field ? undefined
-    : rest.length === 0 ? field
-    : field.type === 'object' && field.fields ? getFieldByPath(field.fields, rest.join('.'))
-    : undefined;
+
+  if (!field) return undefined;
+  if (rest.length === 0) return field;
+
+  if (field.type === 'object' && field.fields) {
+    return getFieldByPath(field.fields, rest.join('.'));
+  }
+
+  // Handle block discriminator field (e.g., "content._block")
+  if (field.type === 'block' && rest.length === 1) {
+    const blockKey = field.blockKey || '_block';
+    if (rest[0] === blockKey) {
+      return { name: blockKey, type: 'string', label: field.label || 'Type' } as Field;
+    }
+  }
+
+  return undefined;
 }
 
 function findNestedFieldPath(
