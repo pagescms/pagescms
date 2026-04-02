@@ -240,6 +240,20 @@ const normalizeConfig = (configObject: any) => {
     delete configObjectCopy.navigation;
   }
 
+  if (Array.isArray(configObjectCopy.media) && Array.isArray(configObjectCopy.content)) {
+    configObjectCopy.media = configObjectCopy.media.map((mediaConfig: any) => {
+      if (mediaConfig.input == null || mediaConfig.input === "") {
+        const matchingContent = configObjectCopy.content.find(
+          (contentItem: any) => contentItem.name === mediaConfig.name
+        );
+        if (matchingContent?.path) {
+          mediaConfig.input = matchingContent.path.replace(/^\/|\/$/g, "");
+        }
+      }
+      return mediaConfig;
+    });
+  }
+
   return configObjectCopy;
 };
 
