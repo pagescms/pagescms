@@ -778,7 +778,7 @@ export function Collection({ name, path }: { name: string; path?: string }) {
   );
 
   const addEntryHref = `/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/collection/${encodeURIComponent(name)}/new${
-    schema.view?.layout !== "tree" && path && path !== schema.path
+    path && path !== schema.path
       ? `?parent=${encodeURIComponent(path)}`
       : ""
   }`;
