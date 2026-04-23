@@ -1,0 +1,81 @@
+export const maxDuration = 30;
+
+import { type NextRequest, NextResponse } from "next/server";
+import { getRepoAnalyticsContext } from "@/lib/analytics/repo-context";
+import { createHttpError, toErrorResponse } from "@/lib/api-error";
+import type { AnalyticsProvider } from "@/lib/analytics/types";
+
+type TestConnectionBody = {
+  provider: AnalyticsProvider;
+};
+
+type Env = {
+  hasGoogleServiceAccount: boolean;
+  hasBingApiKey: boolean;
+  hasCallRailKey: boolean;
+  hasWhatConvertsAuth: boolean;
+  hasNetlifyPat: boolean;
+};
+
+const readEnv = (): Env => ({
+  hasGoogleServiceAccount: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64),
+  hasBingApiKey: Boolean(process.env.BING_WEBMASTER_API_KEY),
+  hasCallRailKey: Boolean(process.env.CALLRAIL_API_KEY),
+  hasWhatConvertsAuth: Boolean(process.env.WHATCONVERTS_API_TOKEN) && Boolean(process.env.WHATCONVERTS_API_SECRET),
+  hasNetlifyPat: Boolean(process.env.NETLIFY_PAT),
+});
+
+/**
+ * v1 shell: checks that (a) the agency credential for the provider is set in
+ * env and (b) the per-site identifier is present on analytics_site. Real API
+ * probes land in PR 2/3 when the provider clients exist in lib/analytics/*.
+ */
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ owner: string; repo: string }> },
+) {
+  try {
+    const params = await context.params;
+    const { site } = await getRepoAnalyticsContext(params);
+
+    const body = (await request.json().catch(() => null)) as TestConnectionBody | null;
+    if (!body?.provider) throw createHttpError("Missing provider in body.", 400);
+
+    const env = readEnv();
+    const checks: Array<{ label: string; ok: boolean; detail?: string }> = [];
+
+    switch (body.provider) {
+      case "gsc":
+        checks.push({ label: "GOOGLE_SERVICE_ACCOUNT_JSON_B64 set", ok: env.hasGoogleServiceAccount });
+        checks.push({ label: "gscProperty configured", ok: Boolean(site?.gscProperty), detail: site?.gscProperty ?? undefined });
+        break;
+      case "bing":
+        checks.push({ label: "BING_WEBMASTER_API_KEY set", ok: env.hasBingApiKey });
+        checks.push({ label: "bingSiteUrl configured", ok: Boolean(site?.bingSiteUrl), detail: site?.bingSiteUrl ?? undefined });
+        break;
+      case "ga4":
+        checks.push({ label: "GOOGLE_SERVICE_ACCOUNT_JSON_B64 set", ok: env.hasGoogleServiceAccount });
+        checks.push({ label: "ga4PropertyId configured", ok: Boolean(site?.ga4PropertyId), detail: site?.ga4PropertyId ?? undefined });
+        break;
+      case "callrail":
+        checks.push({ label: "CALLRAIL_API_KEY set", ok: env.hasCallRailKey });
+        checks.push({ label: "callrailAccountId configured", ok: Boolean(site?.callrailAccountId), detail: site?.callrailAccountId ?? undefined });
+        break;
+      case "whatconverts":
+        checks.push({ label: "WHATCONVERTS_API_TOKEN + SECRET set", ok: env.hasWhatConvertsAuth });
+        checks.push({ label: "whatconvertsProfileId configured", ok: Boolean(site?.whatconvertsProfileId), detail: site?.whatconvertsProfileId ?? undefined });
+        break;
+      case "netlify_forms":
+        checks.push({ label: "NETLIFY_PAT set", ok: env.hasNetlifyPat });
+        checks.push({ label: "netlifySiteId configured", ok: Boolean(site?.netlifySiteId), detail: site?.netlifySiteId ?? undefined });
+        break;
+      default:
+        throw createHttpError(`Unknown provider: ${body.provider}`, 400);
+    }
+
+    const ok = checks.every((c) => c.ok);
+    return NextResponse.json({ status: ok ? "ok" : "error", provider: body.provider, checks });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}

@@ -85,6 +85,13 @@
       "when": 1775631425720,
       "tag": "0011_nice_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776905672900,
+      "tag": "0012_odd_namor",
+      "breakpoints": true
     }
   ]
 }

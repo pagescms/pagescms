@@ -60,6 +60,7 @@ import {
 import {
   ArrowLeft,
   ArrowUpRight,
+  BarChart3,
   ChevronRight,
   ChevronsUpDown,
   Database,
@@ -359,6 +360,13 @@ export function RepoSidebar() {
         icon: <Settings className="size-4" />,
       });
     }
+
+    items.push({
+      key: "admin-analytics",
+      label: "Analytics",
+      href: `/${config.owner}/${config.repo}/analytics`,
+      icon: <BarChart3 className="size-4" />,
+    });
 
     return items;
   }, [config, user]);
