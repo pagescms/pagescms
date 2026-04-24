@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import * as gsc from "./gsc";
 import * as bing from "./bing";
+import * as ga4 from "./ga4";
 import type { AnalyticsProvider, AnalyticsSiteRow } from "./types";
 
 type ProviderResult = { ok: true; dates?: number; dimensions?: number } | { ok: false; reason: string };
@@ -19,6 +20,7 @@ export type SyncResult = {
   repo: string;
   gsc: ProviderResult | null;
   bing: ProviderResult | null;
+  ga4: ProviderResult | null;
 };
 
 const formatDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -95,6 +97,7 @@ export const syncSite = async (
     repo: site.repo,
     gsc: null,
     bing: null,
+    ga4: null,
   };
 
   if (site.gscProperty) {
@@ -133,6 +136,26 @@ export const syncSite = async (
       result.bing = {
         ok: false,
         reason: error instanceof Error ? error.message : "unknown Bing error",
+      };
+    }
+  }
+
+  if (site.ga4PropertyId) {
+    try {
+      const daily = await ga4.fetchDailyTimeseries(site.ga4PropertyId, startDate, endDate);
+      await upsertDailyRows(site.id, "ga4", daily);
+
+      const sources = await ga4.fetchDimensionRollup(site.ga4PropertyId, startDate, endDate, "sessionSourceMedium", 200);
+      await upsertDimensionRows(site.id, "ga4", endDate, "source", sources);
+
+      const landings = await ga4.fetchDimensionRollup(site.ga4PropertyId, startDate, endDate, "landingPage", 200);
+      await upsertDimensionRows(site.id, "ga4", endDate, "landing_page", landings);
+
+      result.ga4 = { ok: true, dates: daily.length, dimensions: sources.length + landings.length };
+    } catch (error) {
+      result.ga4 = {
+        ok: false,
+        reason: error instanceof Error ? error.message : "unknown GA4 error",
       };
     }
   }

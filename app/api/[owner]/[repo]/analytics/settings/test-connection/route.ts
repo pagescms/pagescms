@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getRepoAnalyticsContext } from "@/lib/analytics/repo-context";
 import * as gsc from "@/lib/analytics/gsc";
 import * as bing from "@/lib/analytics/bing";
+import * as ga4 from "@/lib/analytics/ga4";
 import { createHttpError, toErrorResponse } from "@/lib/api-error";
 import type { AnalyticsProvider } from "@/lib/analytics/types";
 
@@ -71,10 +72,20 @@ export async function POST(
         }
         break;
       }
-      case "ga4":
+      case "ga4": {
         checks.push({ label: "GOOGLE_SERVICE_ACCOUNT_JSON_B64 set", ok: env.hasGoogleServiceAccount });
         checks.push({ label: "ga4PropertyId configured", ok: Boolean(site?.ga4PropertyId), detail: site?.ga4PropertyId ?? undefined });
+        if (env.hasGoogleServiceAccount && site?.ga4PropertyId) {
+          const probe = await ga4.probeConnection(site.ga4PropertyId);
+          checks.push({
+            label: probe.ok
+              ? `GA4 API responds (${probe.sessions ?? 0} sessions last 7 days)`
+              : `GA4 API: ${probe.reason}`,
+            ok: probe.ok,
+          });
+        }
         break;
+      }
       case "callrail":
         checks.push({ label: "CALLRAIL_API_KEY set", ok: env.hasCallRailKey });
         checks.push({ label: "callrailAccountId configured", ok: Boolean(site?.callrailAccountId), detail: site?.callrailAccountId ?? undefined });
