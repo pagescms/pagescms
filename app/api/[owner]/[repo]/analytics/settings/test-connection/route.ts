@@ -2,6 +2,8 @@ export const maxDuration = 30;
 
 import { type NextRequest, NextResponse } from "next/server";
 import { getRepoAnalyticsContext } from "@/lib/analytics/repo-context";
+import * as gsc from "@/lib/analytics/gsc";
+import * as bing from "@/lib/analytics/bing";
 import { createHttpError, toErrorResponse } from "@/lib/api-error";
 import type { AnalyticsProvider } from "@/lib/analytics/types";
 
@@ -45,14 +47,30 @@ export async function POST(
     const checks: Array<{ label: string; ok: boolean; detail?: string }> = [];
 
     switch (body.provider) {
-      case "gsc":
+      case "gsc": {
         checks.push({ label: "GOOGLE_SERVICE_ACCOUNT_JSON_B64 set", ok: env.hasGoogleServiceAccount });
         checks.push({ label: "gscProperty configured", ok: Boolean(site?.gscProperty), detail: site?.gscProperty ?? undefined });
+        if (env.hasGoogleServiceAccount && site?.gscProperty) {
+          const probe = await gsc.probeConnection(site.gscProperty);
+          checks.push({
+            label: probe.ok ? "GSC API responds for this property" : `GSC API: ${probe.reason}`,
+            ok: probe.ok,
+          });
+        }
         break;
-      case "bing":
+      }
+      case "bing": {
         checks.push({ label: "BING_WEBMASTER_API_KEY set", ok: env.hasBingApiKey });
         checks.push({ label: "bingSiteUrl configured", ok: Boolean(site?.bingSiteUrl), detail: site?.bingSiteUrl ?? undefined });
+        if (env.hasBingApiKey && site?.bingSiteUrl) {
+          const probe = await bing.probeConnection(site.bingSiteUrl);
+          checks.push({
+            label: probe.ok ? "Bing API responds and site is verified" : `Bing API: ${probe.reason}`,
+            ok: probe.ok,
+          });
+        }
         break;
+      }
       case "ga4":
         checks.push({ label: "GOOGLE_SERVICE_ACCOUNT_JSON_B64 set", ok: env.hasGoogleServiceAccount });
         checks.push({ label: "ga4PropertyId configured", ok: Boolean(site?.ga4PropertyId), detail: site?.ga4PropertyId ?? undefined });

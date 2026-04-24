@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-analytics",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}
