@@ -9,6 +9,7 @@ import { CollaboratorAddedEmailTemplate } from "@/components/email/collaborator-
 import { render } from "@react-email/render";
 import { sendEmail } from "@/lib/mailer";
 import { getBaseUrl } from "@/lib/base-url";
+import { brand } from "@/lib/brand";
 import { db } from "@/db";
 import { and, eq, sql } from "drizzle-orm";
 import { collaboratorTable, verificationTable } from "@/db/schema";
@@ -48,7 +49,7 @@ const assertRepoInInstallation = async (
       installationRepo.name?.toLowerCase() === repo.toLowerCase()
     )
   );
-  if (!isInstalledForRepo) throw new Error(`"${owner}/${repo}" is not part of your Pages CMS installation.`);
+  if (!isInstalledForRepo) throw new Error(`"${owner}/${repo}" is not part of your ${brand.name} installation.`);
 
   return {
     repoAccess,
@@ -193,7 +194,7 @@ const handleAddCollaborator = async (prevState: any, formData: FormData) => {
           );
           await sendEmail({
             to: normalizedEmail,
-            subject: `Join "${owner}/${repo}" on Pages CMS`,
+            subject: `Join "${owner}/${repo}" on ${brand.name}`,
             html,
           });
         } catch (error: any) {
@@ -214,7 +215,7 @@ const handleAddCollaborator = async (prevState: any, formData: FormData) => {
           );
           await sendEmail({
             to: normalizedEmail,
-            subject: `You were added to "${owner}/${repo}" on Pages CMS`,
+            subject: `You were added to "${owner}/${repo}" on ${brand.name}`,
             html,
           });
         } catch (error: any) {
@@ -333,7 +334,7 @@ const handleResendCollaboratorInvite = async (collaboratorId: number, owner: str
 
     await sendEmail({
       to: collaborator.email,
-      subject: `Join "${owner}/${repo}" on Pages CMS`,
+      subject: `Join "${owner}/${repo}" on ${brand.name}`,
       html,
     });
 

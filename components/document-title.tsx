@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-
-const APP_TITLE = "Pages CMS";
+import { brand } from "@/lib/brand";
 
 export const formatDocumentTitle = (title?: string | null) =>
-  title ? `${title} | ${APP_TITLE}` : APP_TITLE;
+  title ? `${title} | ${brand.name}` : brand.defaultTitle;
 
 export const formatRepoBranchTitle = (
   title: string,
