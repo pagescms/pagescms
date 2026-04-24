@@ -12,10 +12,14 @@ import { EngagementChart } from "./engagement-chart";
 import { TopTable } from "./top-table";
 import { SessionsChart } from "./sessions-chart";
 import { Ga4TopTable } from "./ga4-top-table";
+import { LeadsChart } from "./leads-chart";
 import type {
   Ga4Summary,
   Ga4TimeseriesPoint,
   Ga4TopRow,
+  LeadsByFormRow,
+  LeadsSummary,
+  LeadsTimeseriesPoint,
   Summary,
   TimeseriesPoint,
   TopRow,
@@ -38,6 +42,7 @@ const TABS = [
   { label: "Overview", id: "overview" },
   { label: "Search", id: "search" },
   { label: "Traffic", id: "traffic" },
+  { label: "Leads", id: "leads" },
 ] as const;
 
 const formatNumber = (n: number) => new Intl.NumberFormat("en-US").format(n);
@@ -98,6 +103,11 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
     sources: Ga4TopRow[];
     landings: Ga4TopRow[];
   }>(tab === "traffic" ? `${base}/traffic?days=${days}` : null, fetcher);
+  const { data: leadsData } = useSWR<{
+    summary: LeadsSummary | null;
+    points: LeadsTimeseriesPoint[];
+    byForm: LeadsByFormRow[];
+  }>(tab === "leads" ? `${base}/leads?days=${days}` : null, fetcher);
 
   const s = summaryData?.summary;
 
@@ -218,6 +228,106 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
               </p>
             </CardContent>
           </Card>
+        </>
+      )}
+
+      {tab === "leads" && (
+        <>
+          {leadsData?.summary ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <KpiCard
+                  label="Form submissions"
+                  value={formatNumber(leadsData.summary.total)}
+                  delta={leadsData.summary.delta}
+                  sublabel={`vs ${formatNumber(leadsData.summary.totalPrior)} prior`}
+                />
+                <KpiCard
+                  label="Peak day"
+                  value={
+                    leadsData.summary.peakDay
+                      ? `${leadsData.summary.peakDay.count}`
+                      : "—"
+                  }
+                  delta={null}
+                  sublabel={leadsData.summary.peakDay?.date}
+                />
+                <KpiCard
+                  label="Avg / day"
+                  value={leadsData.summary.avgPerDay.toFixed(1)}
+                  delta={null}
+                />
+              </div>
+
+              <Card>
+                <CardHeader className="flex-row items-center justify-between space-y-0 pb-2 gap-3 flex-wrap">
+                  <CardTitle>Form submissions by day</CardTitle>
+                  <Pills
+                    options={[
+                      { label: "Daily", value: "day" },
+                      { label: "Weekly", value: "week" },
+                    ] as const}
+                    value={granularity}
+                    onChange={setGranularity}
+                  />
+                </CardHeader>
+                <CardContent>
+                  <LeadsChart points={leadsData.points} granularity={granularity} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Breakdown by form</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {leadsData.byForm.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-4">
+                      No form submissions in this window.
+                    </div>
+                  ) : (
+                    <div className="rounded-md border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 text-left">
+                          <tr>
+                            <th className="p-2 font-medium">Form</th>
+                            <th className="p-2 font-medium text-right">Submissions</th>
+                            <th className="p-2 font-medium text-right">Share</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {leadsData.byForm.map((row) => (
+                            <tr key={row.form} className="border-t">
+                              <td className="p-2">{row.form}</td>
+                              <td className="p-2 text-right tabular-nums">
+                                {formatNumber(row.submissions)}
+                              </td>
+                              <td className="p-2 text-right tabular-nums text-muted-foreground">
+                                {leadsData.summary && leadsData.summary.total > 0
+                                  ? `${((row.submissions / leadsData.summary.total) * 100).toFixed(0)}%`
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <p className="text-xs text-muted-foreground">
+                Leads currently reflects Netlify Forms submissions only. CallRail &amp;
+                WhatConverts call tracking will appear here once configured per-site.
+              </p>
+            </>
+          ) : (
+            <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
+              {leadsData === undefined
+                ? "Loading…"
+                : "No leads data yet. Configure a Netlify site ID in Settings."}
+            </div>
+          )}
         </>
       )}
 

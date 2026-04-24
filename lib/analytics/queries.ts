@@ -414,3 +414,127 @@ export const getGa4TopSources = (siteId: number, days: number, limit = 50) =>
 
 export const getGa4TopLandings = (siteId: number, days: number, limit = 50) =>
   getGa4Top(siteId, "landing_page", days, limit);
+
+/* ─── Leads (Netlify Forms + future CallRail/WhatConverts) ────────────── */
+
+export type LeadsSummary = {
+  window: { start: string; end: string };
+  prior: { start: string; end: string };
+  total: number;
+  totalPrior: number;
+  delta: number;
+  peakDay: { date: string; count: number } | null;
+  avgPerDay: number;
+};
+
+export type LeadsTimeseriesPoint = { date: string; forms: number };
+export type LeadsByFormRow = { form: string; submissions: number };
+
+type LeadsProvider = "netlify_forms"; // Expand when callrail/whatconverts join.
+
+const sumLeadsInWindow = async (siteId: number, start: string, end: string): Promise<number> => {
+  const rows = await db
+    .select({
+      total: sql<number>`coalesce(sum((${analyticsDailyTable.metrics}->>'submissions')::int), 0)`,
+    })
+    .from(analyticsDailyTable)
+    .where(
+      and(
+        eq(analyticsDailyTable.siteId, siteId),
+        eq(analyticsDailyTable.provider, "netlify_forms" satisfies LeadsProvider),
+        gte(analyticsDailyTable.date, start),
+        lte(analyticsDailyTable.date, end),
+      ),
+    );
+  return Number(rows[0]?.total ?? 0);
+};
+
+export const getLeadsSummary = async (siteId: number, days: number): Promise<LeadsSummary> => {
+  const w = getWindow(days);
+  const [total, totalPrior, peak] = await Promise.all([
+    sumLeadsInWindow(siteId, w.start, w.end),
+    sumLeadsInWindow(siteId, w.priorStart, w.priorEnd),
+    db
+      .select({
+        date: analyticsDailyTable.date,
+        n: sql<number>`(${analyticsDailyTable.metrics}->>'submissions')::int`,
+      })
+      .from(analyticsDailyTable)
+      .where(
+        and(
+          eq(analyticsDailyTable.siteId, siteId),
+          eq(analyticsDailyTable.provider, "netlify_forms"),
+          gte(analyticsDailyTable.date, w.start),
+          lte(analyticsDailyTable.date, w.end),
+        ),
+      )
+      .orderBy(desc(sql`(${analyticsDailyTable.metrics}->>'submissions')::int`))
+      .limit(1),
+  ]);
+
+  const peakDay = peak.length > 0 ? { date: peak[0].date, count: Number(peak[0].n ?? 0) } : null;
+  return {
+    window: { start: w.start, end: w.end },
+    prior: { start: w.priorStart, end: w.priorEnd },
+    total,
+    totalPrior,
+    delta: pct(total, totalPrior),
+    peakDay,
+    avgPerDay: days > 0 ? total / days : 0,
+  };
+};
+
+export const getLeadsTimeseries = async (siteId: number, days: number): Promise<LeadsTimeseriesPoint[]> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      date: analyticsDailyTable.date,
+      submissions: sql<number>`coalesce((${analyticsDailyTable.metrics}->>'submissions')::int, 0)`,
+    })
+    .from(analyticsDailyTable)
+    .where(
+      and(
+        eq(analyticsDailyTable.siteId, siteId),
+        eq(analyticsDailyTable.provider, "netlify_forms"),
+        gte(analyticsDailyTable.date, w.start),
+        lte(analyticsDailyTable.date, w.end),
+      ),
+    )
+    .orderBy(analyticsDailyTable.date);
+
+  const byDate = new Map<string, number>();
+  for (const r of rows) byDate.set(r.date, Number(r.submissions ?? 0));
+
+  const out: LeadsTimeseriesPoint[] = [];
+  for (let d = new Date(w.start); fmt(d) <= w.end; d = addDays(d, 1)) {
+    const key = fmt(d);
+    out.push({ date: key, forms: byDate.get(key) ?? 0 });
+  }
+  return out;
+};
+
+export const getLeadsByForm = async (siteId: number, days: number): Promise<LeadsByFormRow[]> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      value: analyticsDimensionTable.value,
+      submissions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'submissions')::int), 0)`,
+    })
+    .from(analyticsDimensionTable)
+    .where(
+      and(
+        eq(analyticsDimensionTable.siteId, siteId),
+        eq(analyticsDimensionTable.provider, "netlify_forms"),
+        eq(analyticsDimensionTable.dimension, "form"),
+        gte(analyticsDimensionTable.date, w.start),
+        lte(analyticsDimensionTable.date, w.end),
+      ),
+    )
+    .groupBy(analyticsDimensionTable.value)
+    .orderBy(desc(sql`coalesce(sum((${analyticsDimensionTable.metrics}->>'submissions')::int), 0)`));
+
+  return rows.map((r) => ({
+    form: r.value,
+    submissions: Number(r.submissions ?? 0),
+  }));
+};
