@@ -5,6 +5,7 @@ import { getRepoAnalyticsContext } from "@/lib/analytics/repo-context";
 import * as gsc from "@/lib/analytics/gsc";
 import * as bing from "@/lib/analytics/bing";
 import * as ga4 from "@/lib/analytics/ga4";
+import * as netlifyForms from "@/lib/analytics/netlify-forms";
 import { createHttpError, toErrorResponse } from "@/lib/api-error";
 import type { AnalyticsProvider } from "@/lib/analytics/types";
 
@@ -94,10 +95,20 @@ export async function POST(
         checks.push({ label: "WHATCONVERTS_API_TOKEN + SECRET set", ok: env.hasWhatConvertsAuth });
         checks.push({ label: "whatconvertsProfileId configured", ok: Boolean(site?.whatconvertsProfileId), detail: site?.whatconvertsProfileId ?? undefined });
         break;
-      case "netlify_forms":
+      case "netlify_forms": {
         checks.push({ label: "NETLIFY_PAT set", ok: env.hasNetlifyPat });
         checks.push({ label: "netlifySiteId configured", ok: Boolean(site?.netlifySiteId), detail: site?.netlifySiteId ?? undefined });
+        if (env.hasNetlifyPat && site?.netlifySiteId) {
+          const probe = await netlifyForms.probeConnection(site.netlifySiteId);
+          checks.push({
+            label: probe.ok
+              ? `Netlify API responds${probe.name ? ` (site: ${probe.name})` : ""}`
+              : `Netlify API: ${probe.reason}`,
+            ok: probe.ok,
+          });
+        }
         break;
+      }
       default:
         throw createHttpError(`Unknown provider: ${body.provider}`, 400);
     }

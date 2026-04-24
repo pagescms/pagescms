@@ -10,6 +10,7 @@ import {
 import * as gsc from "./gsc";
 import * as bing from "./bing";
 import * as ga4 from "./ga4";
+import * as netlifyForms from "./netlify-forms";
 import type { AnalyticsProvider, AnalyticsSiteRow } from "./types";
 
 type ProviderResult = { ok: true; dates?: number; dimensions?: number } | { ok: false; reason: string };
@@ -21,6 +22,7 @@ export type SyncResult = {
   gsc: ProviderResult | null;
   bing: ProviderResult | null;
   ga4: ProviderResult | null;
+  netlifyForms: ProviderResult | null;
 };
 
 const formatDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -98,6 +100,7 @@ export const syncSite = async (
     gsc: null,
     bing: null,
     ga4: null,
+    netlifyForms: null,
   };
 
   if (site.gscProperty) {
@@ -156,6 +159,23 @@ export const syncSite = async (
       result.ga4 = {
         ok: false,
         reason: error instanceof Error ? error.message : "unknown GA4 error",
+      };
+    }
+  }
+
+  if (site.netlifySiteId) {
+    try {
+      const daily = await netlifyForms.fetchDailySubmissions(site.netlifySiteId, startDate, endDate);
+      await upsertDailyRows(site.id, "netlify_forms", daily);
+
+      const forms = await netlifyForms.fetchPerFormBreakdown(site.netlifySiteId, startDate, endDate);
+      await upsertDimensionRows(site.id, "netlify_forms", endDate, "form", forms);
+
+      result.netlifyForms = { ok: true, dates: daily.length, dimensions: forms.length };
+    } catch (error) {
+      result.netlifyForms = {
+        ok: false,
+        reason: error instanceof Error ? error.message : "unknown Netlify error",
       };
     }
   }
