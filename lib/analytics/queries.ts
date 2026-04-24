@@ -112,9 +112,19 @@ export type TimeseriesPoint = {
   date: string;
   gsc_clicks: number;
   gsc_impressions: number;
+  gsc_position: number | null;
   bing_clicks: number;
   bing_impressions: number;
 };
+
+const emptyPoint = (date: string): TimeseriesPoint => ({
+  date,
+  gsc_clicks: 0,
+  gsc_impressions: 0,
+  gsc_position: null,
+  bing_clicks: 0,
+  bing_impressions: 0,
+});
 
 export const getTimeseries = async (siteId: number, days: number): Promise<TimeseriesPoint[]> => {
   const w = getWindow(days);
@@ -125,6 +135,7 @@ export const getTimeseries = async (siteId: number, days: number): Promise<Times
       provider: analyticsDailyTable.provider,
       clicks: sql<number>`(${analyticsDailyTable.metrics}->>'clicks')::int`,
       impressions: sql<number>`(${analyticsDailyTable.metrics}->>'impressions')::int`,
+      position: sql<number | null>`(${analyticsDailyTable.metrics}->>'position')::numeric`,
     })
     .from(analyticsDailyTable)
     .where(
@@ -140,11 +151,11 @@ export const getTimeseries = async (siteId: number, days: number): Promise<Times
   // Pivot provider → columns, zero-fill missing dates.
   const byDate = new Map<string, TimeseriesPoint>();
   for (const r of rows) {
-    const existing =
-      byDate.get(r.date) ?? { date: r.date, gsc_clicks: 0, gsc_impressions: 0, bing_clicks: 0, bing_impressions: 0 };
+    const existing = byDate.get(r.date) ?? emptyPoint(r.date);
     if (r.provider === "gsc") {
       existing.gsc_clicks += Number(r.clicks ?? 0);
       existing.gsc_impressions += Number(r.impressions ?? 0);
+      if (r.position != null) existing.gsc_position = Number(r.position);
     } else if (r.provider === "bing") {
       existing.bing_clicks += Number(r.clicks ?? 0);
       existing.bing_impressions += Number(r.impressions ?? 0);
@@ -156,7 +167,7 @@ export const getTimeseries = async (siteId: number, days: number): Promise<Times
   const out: TimeseriesPoint[] = [];
   for (let d = new Date(w.start); fmt(d) <= w.end; d = addDays(d, 1)) {
     const key = fmt(d);
-    out.push(byDate.get(key) ?? { date: key, gsc_clicks: 0, gsc_impressions: 0, bing_clicks: 0, bing_impressions: 0 });
+    out.push(byDate.get(key) ?? emptyPoint(key));
   }
   return out;
 };

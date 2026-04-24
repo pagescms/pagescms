@@ -1,53 +1,148 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { format, parseISO } from "date-fns";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { format, parseISO, startOfWeek } from "date-fns";
 import type { TimeseriesPoint } from "@/lib/analytics/queries";
 
 type Props = {
   points: TimeseriesPoint[];
-  metric: "clicks" | "impressions";
+  granularity: "day" | "week";
+  mode: "normalized" | "raw";
 };
 
-export function TimeseriesChart({ points, metric }: Props) {
-  const data = points.map((p) => ({
-    date: p.date,
-    GSC: metric === "clicks" ? p.gsc_clicks : p.gsc_impressions,
-    Bing: metric === "clicks" ? p.bing_clicks : p.bing_impressions,
-  }));
+type Row = {
+  bucket: string;
+  gsc_clicks: number;
+  gsc_impressions: number;
+  bing_clicks: number;
+  bing_impressions: number;
+};
+
+const bucketKey = (date: string, granularity: "day" | "week") => {
+  if (granularity === "day") return date;
+  return format(startOfWeek(parseISO(date), { weekStartsOn: 1 }), "yyyy-MM-dd");
+};
+
+const aggregate = (points: TimeseriesPoint[], granularity: "day" | "week"): Row[] => {
+  const by = new Map<string, Row>();
+  for (const p of points) {
+    const key = bucketKey(p.date, granularity);
+    const existing = by.get(key) ?? {
+      bucket: key,
+      gsc_clicks: 0,
+      gsc_impressions: 0,
+      bing_clicks: 0,
+      bing_impressions: 0,
+    };
+    existing.gsc_clicks += p.gsc_clicks;
+    existing.gsc_impressions += p.gsc_impressions;
+    existing.bing_clicks += p.bing_clicks;
+    existing.bing_impressions += p.bing_impressions;
+    by.set(key, existing);
+  }
+  return Array.from(by.values()).sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
+};
+
+const SERIES = [
+  { key: "gsc_clicks", label: "GSC clicks", color: "#1a73e8", dash: "0" },
+  { key: "bing_clicks", label: "Bing clicks", color: "#00809d", dash: "0" },
+  { key: "gsc_impressions", label: "GSC impressions", color: "#1a73e8", dash: "5 3" },
+  { key: "bing_impressions", label: "Bing impressions", color: "#00809d", dash: "5 3" },
+] as const;
+
+export function TimeseriesChart({ points, granularity, mode }: Props) {
+  const raw = aggregate(points, granularity);
+
+  // Per-series maxes for normalization
+  const maxes: Record<string, number> = {};
+  for (const s of SERIES) {
+    maxes[s.key] = Math.max(0, ...raw.map((r) => (r as unknown as Record<string, number>)[s.key] ?? 0));
+  }
+
+  const chartData = raw.map((r) => {
+    if (mode === "raw") return r;
+    const row: Record<string, number | string> = { bucket: r.bucket };
+    for (const s of SERIES) {
+      const m = maxes[s.key];
+      const v = (r as unknown as Record<string, number>)[s.key] ?? 0;
+      row[s.key] = m > 0 ? (v / m) * 100 : 0;
+      row[`${s.key}_raw`] = v;
+    }
+    return row;
+  });
+
+  const xFormat = granularity === "day" ? "MMM d" : "MMM d";
 
   return (
-    <div className="h-64 w-full">
+    <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="gscFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4285F4" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#4285F4" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="bingFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00809d" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#00809d" stopOpacity={0} />
-            </linearGradient>
-          </defs>
+        <LineChart data={chartData} margin={{ top: 8, right: mode === "raw" ? 48 : 16, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
           <XAxis
-            dataKey="date"
-            tickFormatter={(d: string) => format(parseISO(d), "MMM d")}
+            dataKey="bucket"
+            tickFormatter={(d: string) => format(parseISO(d), xFormat)}
             fontSize={11}
             minTickGap={24}
           />
-          <YAxis fontSize={11} width={36} />
+          {mode === "normalized" ? (
+            <YAxis
+              fontSize={11}
+              width={40}
+              domain={[0, 100]}
+              tickFormatter={(v: number) => `${v.toFixed(0)}%`}
+            />
+          ) : (
+            <>
+              <YAxis yAxisId="clicks" fontSize={11} width={40} orientation="left" />
+              <YAxis yAxisId="impr" fontSize={11} width={48} orientation="right" />
+            </>
+          )}
           <Tooltip
             labelFormatter={(label) =>
-              typeof label === "string" ? format(parseISO(label), "EEE, MMM d, yyyy") : String(label ?? "")
+              typeof label === "string"
+                ? format(parseISO(label), granularity === "week" ? "'Week of' MMM d" : "EEE, MMM d, yyyy")
+                : String(label ?? "")
             }
+            formatter={((value: unknown, name: unknown, item: unknown) => {
+              const v = Number(value ?? 0);
+              const n = String(name ?? "");
+              if (mode === "normalized") {
+                const rawKey = SERIES.find((s) => s.label === n)?.key;
+                const payload = (item as { payload?: Record<string, number> })?.payload;
+                const rawVal = rawKey && payload ? payload[`${rawKey}_raw`] : undefined;
+                return [`${v.toFixed(0)}% (${rawVal ?? "—"})`, n];
+              }
+              return [v.toLocaleString(), n];
+            }) as never}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Area type="monotone" dataKey="GSC" stroke="#4285F4" strokeWidth={2} fill="url(#gscFill)" stackId={metric === "clicks" ? "1" : undefined} />
-          <Area type="monotone" dataKey="Bing" stroke="#00809d" strokeWidth={2} fill="url(#bingFill)" stackId={metric === "clicks" ? "1" : undefined} />
-        </AreaChart>
+          {SERIES.map((s) => {
+            const isClicks = s.key.endsWith("_clicks");
+            return (
+              <Line
+                key={s.key}
+                type="monotone"
+                name={s.label}
+                dataKey={s.key}
+                stroke={s.color}
+                strokeWidth={2}
+                strokeDasharray={s.dash}
+                dot={false}
+                yAxisId={mode === "raw" ? (isClicks ? "clicks" : "impr") : undefined}
+              />
+            );
+          })}
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

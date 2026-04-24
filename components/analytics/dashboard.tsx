@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KpiCard } from "./kpi-card";
 import { TimeseriesChart } from "./timeseries-chart";
+import { EngagementChart } from "./engagement-chart";
 import { TopTable } from "./top-table";
 import type { Summary, TimeseriesPoint, TopRow } from "@/lib/analytics/queries";
 
@@ -32,10 +33,40 @@ const TABS = [
 const formatNumber = (n: number) => new Intl.NumberFormat("en-US").format(n);
 const formatPct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
+type PillOption<T extends string> = { label: string; value: T };
+
+function Pills<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly PillOption<T>[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "px-3 py-1 text-xs rounded",
+            value === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AnalyticsDashboard({ owner, repo }: Props) {
-  const [days, setDays] = useState(28);
+  const [days, setDays] = useState<7 | 28 | 90>(28);
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
-  const [chartMetric, setChartMetric] = useState<"clicks" | "impressions">("clicks");
+  const [granularity, setGranularity] = useState<"day" | "week">("day");
+  const [mode, setMode] = useState<"normalized" | "raw">("normalized");
 
   const base = `/api/${owner}/${repo}/analytics`;
   const { data: summaryData } = useSWR<{ summary: Summary | null }>(`${base}/summary?days=${days}`, fetcher);
@@ -67,20 +98,11 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <div className="inline-flex rounded-md border p-0.5">
-            {DAY_PRESETS.map((p) => (
-              <button
-                key={p.days}
-                onClick={() => setDays(p.days)}
-                className={cn(
-                  "px-3 py-1 text-xs rounded",
-                  days === p.days ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <Pills
+            options={DAY_PRESETS.map((p) => ({ label: p.label, value: String(p.days) })) as readonly PillOption<string>[]}
+            value={String(days)}
+            onChange={(v) => setDays(parseInt(v, 10) as 7 | 28 | 90)}
+          />
           <a className={buttonVariants({ variant: "outline", size: "sm" })} href={`/${owner}/${repo}/analytics/settings`}>
             Settings
           </a>
@@ -127,30 +149,57 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
               lowerIsBetter
             />
           </div>
+
           <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle>Traffic — {chartMetric === "clicks" ? "Clicks" : "Impressions"} by day</CardTitle>
-              <div className="inline-flex rounded-md border p-0.5">
-                {(["clicks", "impressions"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setChartMetric(m)}
-                    className={cn(
-                      "px-3 py-1 text-xs rounded capitalize",
-                      chartMetric === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {m}
-                  </button>
-                ))}
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-2 gap-3 flex-wrap">
+              <CardTitle>Traffic</CardTitle>
+              <div className="flex items-center gap-2">
+                <Pills
+                  options={[
+                    { label: "Daily", value: "day" },
+                    { label: "Weekly", value: "week" },
+                  ] as const}
+                  value={granularity}
+                  onChange={setGranularity}
+                />
+                <Pills
+                  options={[
+                    { label: "Normalized", value: "normalized" },
+                    { label: "Raw", value: "raw" },
+                  ] as const}
+                  value={mode}
+                  onChange={setMode}
+                />
               </div>
             </CardHeader>
             <CardContent>
               {tsData ? (
-                <TimeseriesChart points={tsData.points} metric={chartMetric} />
+                <TimeseriesChart points={tsData.points} granularity={granularity} mode={mode} />
+              ) : (
+                <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Loading chart…</div>
+              )}
+              {mode === "normalized" && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Each line is scaled 0–100% of its own peak in this window. Hover a point to see raw values.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle>Engagement — CTR &amp; avg position (GSC)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {tsData ? (
+                <EngagementChart points={tsData.points} granularity={granularity} />
               ) : (
                 <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">Loading chart…</div>
               )}
+              <p className="text-xs text-muted-foreground mt-2">
+                Position axis is inverted — higher on the chart = better ranking. Bing doesn&apos;t expose per-day
+                position so this chart is GSC-only.
+              </p>
             </CardContent>
           </Card>
         </>
