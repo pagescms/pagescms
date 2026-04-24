@@ -43,11 +43,12 @@ export const getSites = async () => {
 };
 
 /**
- * Bing represents dates as /Date(epochMillis)/ in JSON. Convert to YYYY-MM-DD.
+ * Bing represents dates as /Date(epochMillis±TZOFFSET)/ in JSON (the TZ offset
+ * is optional and, when present, looks like -0700). Convert to YYYY-MM-DD in UTC.
  */
 const parseBingDate = (raw: string | undefined): string => {
   if (!raw) return "";
-  const m = /\/Date\((\d+)\)\//.exec(raw);
+  const m = /\/Date\((\d+)(?:[+-]\d{4})?\)\//.exec(raw);
   if (!m) return raw.slice(0, 10);
   return new Date(parseInt(m[1], 10)).toISOString().slice(0, 10);
 };
