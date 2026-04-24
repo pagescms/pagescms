@@ -239,3 +239,178 @@ export const getTopQueries = (siteId: number, days: number, provider: ProviderFi
 
 export const getTopPages = (siteId: number, days: number, provider: ProviderFilter = "gsc", limit = 50) =>
   getTop(siteId, "page", days, provider, limit);
+
+/* ─── GA4 reads ─────────────────────────────────────────────────────────── */
+
+export type Ga4SummaryMetrics = {
+  sessions: number;
+  activeUsers: number;
+  engagedSessions: number;
+  screenPageViews: number;
+  engagementRate: number;
+};
+
+export type Ga4Summary = {
+  window: { start: string; end: string };
+  prior: { start: string; end: string };
+  current: Ga4SummaryMetrics;
+  previous: Ga4SummaryMetrics;
+  delta: { sessions: number; activeUsers: number; engagedSessions: number; screenPageViews: number; engagementRate: number };
+};
+
+const ga4Aggregate = async (siteId: number, start: string, end: string): Promise<Ga4SummaryMetrics> => {
+  const rows = await db
+    .select({
+      sessions: sql<number>`coalesce(sum((${analyticsDailyTable.metrics}->>'sessions')::int), 0)`,
+      activeUsers: sql<number>`coalesce(sum((${analyticsDailyTable.metrics}->>'activeUsers')::int), 0)`,
+      engagedSessions: sql<number>`coalesce(sum((${analyticsDailyTable.metrics}->>'engagedSessions')::int), 0)`,
+      screenPageViews: sql<number>`coalesce(sum((${analyticsDailyTable.metrics}->>'screenPageViews')::int), 0)`,
+    })
+    .from(analyticsDailyTable)
+    .where(
+      and(
+        eq(analyticsDailyTable.siteId, siteId),
+        eq(analyticsDailyTable.provider, "ga4"),
+        gte(analyticsDailyTable.date, start),
+        lte(analyticsDailyTable.date, end),
+      ),
+    );
+  const r = rows[0] ?? { sessions: 0, activeUsers: 0, engagedSessions: 0, screenPageViews: 0 };
+  const sessions = Number(r.sessions ?? 0);
+  const engaged = Number(r.engagedSessions ?? 0);
+  return {
+    sessions,
+    activeUsers: Number(r.activeUsers ?? 0),
+    engagedSessions: engaged,
+    screenPageViews: Number(r.screenPageViews ?? 0),
+    engagementRate: sessions > 0 ? engaged / sessions : 0,
+  };
+};
+
+export const getGa4Summary = async (siteId: number, days: number): Promise<Ga4Summary> => {
+  const w = getWindow(days);
+  const current = await ga4Aggregate(siteId, w.start, w.end);
+  const previous = await ga4Aggregate(siteId, w.priorStart, w.priorEnd);
+  return {
+    window: { start: w.start, end: w.end },
+    prior: { start: w.priorStart, end: w.priorEnd },
+    current,
+    previous,
+    delta: {
+      sessions: pct(current.sessions, previous.sessions),
+      activeUsers: pct(current.activeUsers, previous.activeUsers),
+      engagedSessions: pct(current.engagedSessions, previous.engagedSessions),
+      screenPageViews: pct(current.screenPageViews, previous.screenPageViews),
+      engagementRate: pct(current.engagementRate, previous.engagementRate),
+    },
+  };
+};
+
+export type Ga4TimeseriesPoint = {
+  date: string;
+  sessions: number;
+  activeUsers: number;
+  engagedSessions: number;
+  screenPageViews: number;
+};
+
+const emptyGa4 = (date: string): Ga4TimeseriesPoint => ({
+  date,
+  sessions: 0,
+  activeUsers: 0,
+  engagedSessions: 0,
+  screenPageViews: 0,
+});
+
+export const getGa4Timeseries = async (siteId: number, days: number): Promise<Ga4TimeseriesPoint[]> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      date: analyticsDailyTable.date,
+      sessions: sql<number>`(${analyticsDailyTable.metrics}->>'sessions')::int`,
+      activeUsers: sql<number>`(${analyticsDailyTable.metrics}->>'activeUsers')::int`,
+      engagedSessions: sql<number>`(${analyticsDailyTable.metrics}->>'engagedSessions')::int`,
+      screenPageViews: sql<number>`(${analyticsDailyTable.metrics}->>'screenPageViews')::int`,
+    })
+    .from(analyticsDailyTable)
+    .where(
+      and(
+        eq(analyticsDailyTable.siteId, siteId),
+        eq(analyticsDailyTable.provider, "ga4"),
+        gte(analyticsDailyTable.date, w.start),
+        lte(analyticsDailyTable.date, w.end),
+      ),
+    )
+    .orderBy(analyticsDailyTable.date);
+
+  const byDate = new Map<string, Ga4TimeseriesPoint>();
+  for (const r of rows) {
+    byDate.set(r.date, {
+      date: r.date,
+      sessions: Number(r.sessions ?? 0),
+      activeUsers: Number(r.activeUsers ?? 0),
+      engagedSessions: Number(r.engagedSessions ?? 0),
+      screenPageViews: Number(r.screenPageViews ?? 0),
+    });
+  }
+  const out: Ga4TimeseriesPoint[] = [];
+  for (let d = new Date(w.start); fmt(d) <= w.end; d = addDays(d, 1)) {
+    const key = fmt(d);
+    out.push(byDate.get(key) ?? emptyGa4(key));
+  }
+  return out;
+};
+
+export type Ga4TopRow = {
+  value: string;
+  sessions: number;
+  activeUsers: number;
+  engagedSessions: number;
+  engagementRate: number;
+};
+
+const getGa4Top = async (
+  siteId: number,
+  dimension: "source" | "landing_page",
+  days: number,
+  limit: number,
+): Promise<Ga4TopRow[]> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      value: analyticsDimensionTable.value,
+      sessions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'sessions')::int), 0)`,
+      activeUsers: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'activeUsers')::int), 0)`,
+      engagedSessions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'engagedSessions')::int), 0)`,
+    })
+    .from(analyticsDimensionTable)
+    .where(
+      and(
+        eq(analyticsDimensionTable.siteId, siteId),
+        eq(analyticsDimensionTable.provider, "ga4"),
+        eq(analyticsDimensionTable.dimension, dimension),
+        gte(analyticsDimensionTable.date, w.start),
+        lte(analyticsDimensionTable.date, w.end),
+      ),
+    )
+    .groupBy(analyticsDimensionTable.value)
+    .orderBy(desc(sql`coalesce(sum((${analyticsDimensionTable.metrics}->>'sessions')::int), 0)`))
+    .limit(limit);
+  return rows.map((r) => {
+    const sessions = Number(r.sessions ?? 0);
+    const engaged = Number(r.engagedSessions ?? 0);
+    return {
+      value: r.value,
+      sessions,
+      activeUsers: Number(r.activeUsers ?? 0),
+      engagedSessions: engaged,
+      engagementRate: sessions > 0 ? engaged / sessions : 0,
+    };
+  });
+};
+
+export const getGa4TopSources = (siteId: number, days: number, limit = 50) =>
+  getGa4Top(siteId, "source", days, limit);
+
+export const getGa4TopLandings = (siteId: number, days: number, limit = 50) =>
+  getGa4Top(siteId, "landing_page", days, limit);

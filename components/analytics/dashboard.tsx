@@ -10,7 +10,16 @@ import { KpiCard } from "./kpi-card";
 import { TimeseriesChart } from "./timeseries-chart";
 import { EngagementChart } from "./engagement-chart";
 import { TopTable } from "./top-table";
-import type { Summary, TimeseriesPoint, TopRow } from "@/lib/analytics/queries";
+import { SessionsChart } from "./sessions-chart";
+import { Ga4TopTable } from "./ga4-top-table";
+import type {
+  Ga4Summary,
+  Ga4TimeseriesPoint,
+  Ga4TopRow,
+  Summary,
+  TimeseriesPoint,
+  TopRow,
+} from "@/lib/analytics/queries";
 
 type Props = {
   owner: string;
@@ -28,6 +37,7 @@ const DAY_PRESETS = [
 const TABS = [
   { label: "Overview", id: "overview" },
   { label: "Search", id: "search" },
+  { label: "Traffic", id: "traffic" },
 ] as const;
 
 const formatNumber = (n: number) => new Intl.NumberFormat("en-US").format(n);
@@ -82,6 +92,12 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
     tab === "search" ? `${base}/top-pages?days=${days}&provider=gsc&limit=50` : null,
     fetcher,
   );
+  const { data: trafficData } = useSWR<{
+    summary: Ga4Summary | null;
+    points: Ga4TimeseriesPoint[];
+    sources: Ga4TopRow[];
+    landings: Ga4TopRow[];
+  }>(tab === "traffic" ? `${base}/traffic?days=${days}` : null, fetcher);
 
   const s = summaryData?.summary;
 
@@ -202,6 +218,77 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
               </p>
             </CardContent>
           </Card>
+        </>
+      )}
+
+      {tab === "traffic" && (
+        <>
+          {trafficData?.summary ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <KpiCard
+                  label="Sessions"
+                  value={formatNumber(trafficData.summary.current.sessions)}
+                  delta={trafficData.summary.delta.sessions}
+                />
+                <KpiCard
+                  label="Users"
+                  value={formatNumber(trafficData.summary.current.activeUsers)}
+                  delta={trafficData.summary.delta.activeUsers}
+                />
+                <KpiCard
+                  label="Engagement rate"
+                  value={formatPct(trafficData.summary.current.engagementRate)}
+                  delta={trafficData.summary.delta.engagementRate}
+                />
+                <KpiCard
+                  label="Pageviews"
+                  value={formatNumber(trafficData.summary.current.screenPageViews)}
+                  delta={trafficData.summary.delta.screenPageViews}
+                />
+              </div>
+
+              <Card>
+                <CardHeader className="flex-row items-center justify-between space-y-0 pb-2 gap-3 flex-wrap">
+                  <CardTitle>Sessions — GA4</CardTitle>
+                  <Pills
+                    options={[
+                      { label: "Daily", value: "day" },
+                      { label: "Weekly", value: "week" },
+                    ] as const}
+                    value={granularity}
+                    onChange={setGranularity}
+                  />
+                </CardHeader>
+                <CardContent>
+                  <SessionsChart points={trafficData.points} granularity={granularity} />
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top sources / mediums</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Ga4TopTable rows={trafficData.sources} valueLabel="Source / medium" />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top landing pages</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Ga4TopTable rows={trafficData.landings} valueLabel="Landing page" valueIsPath />
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : (
+            <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
+              {trafficData === undefined ? "Loading…" : "No GA4 data yet. Configure a property ID in Settings."}
+            </div>
+          )}
         </>
       )}
 
