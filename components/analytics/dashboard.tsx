@@ -14,6 +14,7 @@ import { SessionsChart } from "./sessions-chart";
 import { Ga4TopTable } from "./ga4-top-table";
 import { LeadsChart } from "./leads-chart";
 import type {
+  Ga4AiReferrals,
   Ga4Summary,
   Ga4TimeseriesPoint,
   Ga4TopRow,
@@ -24,6 +25,7 @@ import type {
   TimeseriesPoint,
   TopRow,
 } from "@/lib/analytics/queries";
+import { AI_SURFACES } from "@/lib/analytics/ai-sources";
 
 type Props = {
   owner: string;
@@ -102,6 +104,7 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
     points: Ga4TimeseriesPoint[];
     sources: Ga4TopRow[];
     landings: Ga4TopRow[];
+    aiReferrals: Ga4AiReferrals | null;
   }>(tab === "traffic" ? `${base}/traffic?days=${days}` : null, fetcher);
   const { data: leadsData } = useSWR<{
     summary: LeadsSummary | null;
@@ -372,6 +375,74 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
                 </CardHeader>
                 <CardContent>
                   <SessionsChart points={trafficData.points} granularity={granularity} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>AI Referrals</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Sessions referred from known AI surfaces (ChatGPT, Copilot, Perplexity, Claude, Gemini, +{AI_SURFACES.length - 5} more).
+                      </p>
+                    </div>
+                    {trafficData.aiReferrals && trafficData.aiReferrals.totalSessions > 0 && (
+                      <div className="text-right">
+                        <div className="text-2xl font-semibold tabular-nums">
+                          {trafficData.aiReferrals.totalSessions.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          sessions in window
+                          {trafficData.aiReferrals.totalSessionsPrior > 0 && (
+                            <span
+                              className={cn(
+                                "ml-2 font-medium",
+                                trafficData.aiReferrals.delta >= 0 ? "text-green-600" : "text-red-600",
+                              )}
+                            >
+                              {trafficData.aiReferrals.delta >= 0 ? "+" : ""}
+                              {(trafficData.aiReferrals.delta * 100).toFixed(0)}% vs prior
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {!trafficData.aiReferrals || trafficData.aiReferrals.totalSessions === 0 ? (
+                    <div className="h-24 flex items-center justify-center text-center text-muted-foreground text-sm px-4">
+                      No AI referral traffic detected in this window. Note: clicks from bing.com/chat appear as regular Bing traffic in GA4 and aren&apos;t countable here.
+                    </div>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-muted-foreground border-b">
+                          <th className="py-2 font-medium">Surface</th>
+                          <th className="py-2 font-medium text-right">Sessions</th>
+                          <th className="py-2 font-medium text-right">Engaged</th>
+                          <th className="py-2 font-medium text-right">Engagement rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trafficData.aiReferrals.perSurface.map((row) => {
+                          const rate = row.sessions > 0 ? row.engagedSessions / row.sessions : 0;
+                          return (
+                            <tr key={row.sessionSourceMedium} className="border-b last:border-0">
+                              <td className="py-2">
+                                <div className="font-medium">{row.surface}</div>
+                                <div className="text-xs text-muted-foreground">{row.sessionSourceMedium}</div>
+                              </td>
+                              <td className="py-2 text-right tabular-nums">{row.sessions.toLocaleString()}</td>
+                              <td className="py-2 text-right tabular-nums">{row.engagedSessions.toLocaleString()}</td>
+                              <td className="py-2 text-right tabular-nums">{(rate * 100).toFixed(0)}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </CardContent>
               </Card>
 

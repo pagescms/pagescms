@@ -4,6 +4,7 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { analyticsDailyTable, analyticsDimensionTable } from "@/db/schema";
 import type { AnalyticsProvider } from "./types";
+import { matchAiSurface } from "./ai-sources";
 
 /** YYYY-MM-DD helpers — we store date as TEXT so string compare is correct. */
 const fmt = (d: Date) => d.toISOString().slice(0, 10);
@@ -414,6 +415,102 @@ export const getGa4TopSources = (siteId: number, days: number, limit = 50) =>
 
 export const getGa4TopLandings = (siteId: number, days: number, limit = 50) =>
   getGa4Top(siteId, "landing_page", days, limit);
+
+/* ─── AI Referrals (filter GA4 source rows by known AI hostnames) ─────── */
+//
+// Bing has no public API for Copilot citations as of early 2026, and clicks
+// from bing.com/chat are indistinguishable from regular Bing organic at the
+// GA4 sessionSourceMedium level. The closest signal we can give clients is
+// "sessions referred from a known AI surface" (ChatGPT / Perplexity / Claude
+// / Gemini / Copilot direct app / etc.). See lib/analytics/ai-sources.ts.
+
+export type AiReferralRow = {
+  surface: string;
+  sessionSourceMedium: string;
+  sessions: number;
+  activeUsers: number;
+  engagedSessions: number;
+};
+
+export type Ga4AiReferrals = {
+  window: { start: string; end: string };
+  prior: { start: string; end: string };
+  totalSessions: number;
+  totalSessionsPrior: number;
+  delta: number;
+  perSurface: AiReferralRow[];
+  timeseries: { date: string; sessions: number }[];
+};
+
+export const getGa4AiReferrals = async (siteId: number, days: number): Promise<Ga4AiReferrals> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      date: analyticsDimensionTable.date,
+      value: analyticsDimensionTable.value,
+      sessions: sql<number>`coalesce((${analyticsDimensionTable.metrics}->>'sessions')::int, 0)`,
+      activeUsers: sql<number>`coalesce((${analyticsDimensionTable.metrics}->>'activeUsers')::int, 0)`,
+      engagedSessions: sql<number>`coalesce((${analyticsDimensionTable.metrics}->>'engagedSessions')::int, 0)`,
+    })
+    .from(analyticsDimensionTable)
+    .where(
+      and(
+        eq(analyticsDimensionTable.siteId, siteId),
+        eq(analyticsDimensionTable.provider, "ga4"),
+        eq(analyticsDimensionTable.dimension, "source"),
+        gte(analyticsDimensionTable.date, w.priorStart),
+        lte(analyticsDimensionTable.date, w.end),
+      ),
+    );
+
+  const perSurfaceMap = new Map<string, AiReferralRow>();
+  const timeseriesMap = new Map<string, number>();
+  let totalSessions = 0;
+  let totalSessionsPrior = 0;
+
+  for (const r of rows) {
+    const surface = matchAiSurface(r.value);
+    if (!surface) continue;
+    const sessions = Number(r.sessions ?? 0);
+    const inCurrent = r.date >= w.start && r.date <= w.end;
+    const inPrior = r.date >= w.priorStart && r.date <= w.priorEnd;
+    if (inPrior) totalSessionsPrior += sessions;
+    if (!inCurrent) continue;
+
+    totalSessions += sessions;
+    timeseriesMap.set(r.date, (timeseriesMap.get(r.date) ?? 0) + sessions);
+
+    const existing = perSurfaceMap.get(r.value) ?? {
+      surface: surface.label,
+      sessionSourceMedium: r.value,
+      sessions: 0,
+      activeUsers: 0,
+      engagedSessions: 0,
+    };
+    existing.sessions += sessions;
+    existing.activeUsers += Number(r.activeUsers ?? 0);
+    existing.engagedSessions += Number(r.engagedSessions ?? 0);
+    perSurfaceMap.set(r.value, existing);
+  }
+
+  const timeseries: { date: string; sessions: number }[] = [];
+  for (let d = new Date(w.start); fmt(d) <= w.end; d = addDays(d, 1)) {
+    const key = fmt(d);
+    timeseries.push({ date: key, sessions: timeseriesMap.get(key) ?? 0 });
+  }
+
+  const perSurface = [...perSurfaceMap.values()].sort((a, b) => b.sessions - a.sessions);
+
+  return {
+    window: { start: w.start, end: w.end },
+    prior: { start: w.priorStart, end: w.priorEnd },
+    totalSessions,
+    totalSessionsPrior,
+    delta: pct(totalSessions, totalSessionsPrior),
+    perSurface,
+    timeseries,
+  };
+};
 
 /* ─── Leads (Netlify Forms + future CallRail/WhatConverts) ────────────── */
 

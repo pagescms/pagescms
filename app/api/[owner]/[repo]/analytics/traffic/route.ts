@@ -7,6 +7,7 @@ import {
   getGa4Timeseries,
   getGa4TopSources,
   getGa4TopLandings,
+  getGa4AiReferrals,
 } from "@/lib/analytics/queries";
 import { toErrorResponse } from "@/lib/api-error";
 
@@ -23,18 +24,26 @@ export async function GET(
     const params = await context.params;
     const { site } = await getRepoAnalyticsContext(params);
     if (!site) {
-      return NextResponse.json({ status: "ok", summary: null, points: [], sources: [], landings: [] });
+      return NextResponse.json({
+        status: "ok",
+        summary: null,
+        points: [],
+        sources: [],
+        landings: [],
+        aiReferrals: null,
+      });
     }
 
     const days = parseDays(request.nextUrl.searchParams.get("days"));
-    const [summary, points, sources, landings] = await Promise.all([
+    const [summary, points, sources, landings, aiReferrals] = await Promise.all([
       getGa4Summary(site.id, days),
       getGa4Timeseries(site.id, days),
       getGa4TopSources(site.id, days, 50),
       getGa4TopLandings(site.id, days, 50),
+      getGa4AiReferrals(site.id, days),
     ]);
 
-    return NextResponse.json({ status: "ok", summary, points, sources, landings });
+    return NextResponse.json({ status: "ok", summary, points, sources, landings, aiReferrals });
   } catch (error) {
     return toErrorResponse(error);
   }
