@@ -106,28 +106,54 @@ export const fetchDailyTimeseries = async (
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 };
 
+/**
+ * Dedupe rollup rows by `value` — Bing's GetQueryStats/GetPageStats sometimes
+ * return the same query (or page) multiple times within a single date window
+ * (different segment splits). Postgres ON CONFLICT DO UPDATE rejects batches
+ * with duplicate target keys, so we collapse here before persisting.
+ */
+const dedupeByValue = (
+  rows: Array<{ value: string; metrics: BingMetrics }>,
+): Array<{ value: string; metrics: BingMetrics }> => {
+  const map = new Map<string, BingMetrics>();
+  for (const r of rows) {
+    const existing = map.get(r.value);
+    if (existing) {
+      existing.clicks += r.metrics.clicks;
+      existing.impressions += r.metrics.impressions;
+    } else {
+      map.set(r.value, { ...r.metrics });
+    }
+  }
+  return [...map.entries()].map(([value, metrics]) => ({ value, metrics }));
+};
+
 export const fetchTopQueries = async (
   siteUrl: string,
 ): Promise<Array<{ value: string; metrics: BingMetrics }>> => {
   const rows = await getQueryStats(siteUrl);
-  return rows
-    .filter((r) => r.Query)
-    .map((r) => ({
-      value: r.Query as string,
-      metrics: { clicks: r.Clicks ?? 0, impressions: r.Impressions ?? 0 },
-    }));
+  return dedupeByValue(
+    rows
+      .filter((r) => r.Query)
+      .map((r) => ({
+        value: r.Query as string,
+        metrics: { clicks: r.Clicks ?? 0, impressions: r.Impressions ?? 0 },
+      })),
+  );
 };
 
 export const fetchTopPages = async (
   siteUrl: string,
 ): Promise<Array<{ value: string; metrics: BingMetrics }>> => {
   const rows = await getPageStats(siteUrl);
-  return rows
-    .filter((r) => r.Page)
-    .map((r) => ({
-      value: r.Page as string,
-      metrics: { clicks: r.Clicks ?? 0, impressions: r.Impressions ?? 0 },
-    }));
+  return dedupeByValue(
+    rows
+      .filter((r) => r.Page)
+      .map((r) => ({
+        value: r.Page as string,
+        metrics: { clicks: r.Clicks ?? 0, impressions: r.Impressions ?? 0 },
+      })),
+  );
 };
 
 export const probeConnection = async (
