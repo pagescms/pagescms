@@ -46,6 +46,8 @@ type Body = {
   whatconvertsAccountId?: string | null;
   whatconvertsProfileId?: string | null;
   netlifySiteId?: string | null;
+  llmMentionsEnabled?: boolean;
+  llmMentionsCompetitors?: string[];
   digestEnabled?: boolean;
   digestRecipients?: string[];
   skipProbes?: boolean;
@@ -193,6 +195,8 @@ export async function POST(request: NextRequest) {
       whatconvertsAccountId: body.whatconvertsAccountId ?? null,
       whatconvertsProfileId: body.whatconvertsProfileId ?? null,
       netlifySiteId,
+      llmMentionsEnabled: body.llmMentionsEnabled ?? false,
+      llmMentionsCompetitors: body.llmMentionsCompetitors ?? [],
       digestEnabled: body.digestEnabled ?? true,
       digestRecipients: body.digestRecipients ?? [],
       updatedAt: new Date(),

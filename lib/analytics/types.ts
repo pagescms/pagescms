@@ -4,7 +4,18 @@ export type AnalyticsProvider =
   | "ga4"
   | "callrail"
   | "whatconverts"
-  | "netlify_forms";
+  | "netlify_forms"
+  | "llm_mentions";
+
+export type LlmPlatform = "google" | "chat_gpt";
+
+/** DataForSEO LLM Mentions covers Google AI Overview (Gemini-powered) + ChatGPT only. */
+export const LLM_PLATFORMS: readonly LlmPlatform[] = ["google", "chat_gpt"] as const;
+
+export const LLM_PLATFORM_LABELS: Record<LlmPlatform, string> = {
+  google: "Google AI Overview (Gemini)",
+  chat_gpt: "ChatGPT",
+};
 
 export type CallTrackingProvider = "callrail" | "whatconverts" | null;
 
@@ -22,6 +33,8 @@ export type AnalyticsSiteRow = {
   whatconvertsAccountId: string | null;
   whatconvertsProfileId: string | null;
   netlifySiteId: string | null;
+  llmMentionsEnabled: boolean;
+  llmMentionsCompetitors: string[];
   digestEnabled: boolean;
   digestRecipients: string[];
   lastSyncedAt: Date | null;
@@ -68,6 +81,19 @@ export type NetlifyFormsMetrics = {
   submissions: number;
 };
 
+export type LlmMentionsMetrics = {
+  /** Total mentions of the target across all platforms in this day. */
+  totalMentions: number;
+  /** Google AI Overview mentions (gemini-powered). */
+  googleMentions: number;
+  /** ChatGPT mentions. */
+  chatGptMentions: number;
+  /** Number of unique prompts where the target appeared. */
+  uniquePrompts: number;
+  /** Number of unique URLs from the target's domain that were cited. */
+  uniqueCitedUrls: number;
+};
+
 export type ProviderMetrics = {
   gsc: GscMetrics;
   bing: BingMetrics;
@@ -75,6 +101,7 @@ export type ProviderMetrics = {
   callrail: CallRailMetrics;
   whatconverts: WhatConvertsMetrics;
   netlify_forms: NetlifyFormsMetrics;
+  llm_mentions: LlmMentionsMetrics;
 };
 
 export type AnalyticsDailyRow<P extends AnalyticsProvider = AnalyticsProvider> = {
@@ -104,4 +131,5 @@ export const PROVIDER_LABELS: Record<AnalyticsProvider, string> = {
   callrail: "CallRail",
   whatconverts: "WhatConverts",
   netlify_forms: "Netlify Forms",
+  llm_mentions: "AI Citations (DataForSEO)",
 };

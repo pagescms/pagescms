@@ -512,6 +512,180 @@ export const getGa4AiReferrals = async (siteId: number, days: number): Promise<G
   };
 };
 
+/* ─── LLM Mentions (DataForSEO — Google AI Overview + ChatGPT only) ──── */
+//
+// IMPORTANT for the dashboard: this dataset only covers Google AI Overview
+// (Gemini-powered) and ChatGPT. Perplexity, Claude, Gemini Direct, and Bing
+// Copilot are NOT covered. Surface this disclaimer to clients explicitly.
+
+export type LlmMentionsSummary = {
+  window: { start: string; end: string };
+  prior: { start: string; end: string };
+  latest: {
+    date: string | null;
+    totalMentions: number;
+    googleMentions: number;
+    chatGptMentions: number;
+    uniquePrompts: number;
+    uniqueCitedUrls: number;
+  };
+  priorLatest: {
+    totalMentions: number;
+  };
+  delta: { totalMentions: number };
+};
+
+export type LlmPromptRow = {
+  prompt: string;
+  googleMentions: number;
+  chatGptMentions: number;
+  aiSearchVolume: number;
+  answerSnippet: string;
+  firstSourceUrl: string | null;
+};
+
+export type LlmCitedUrlRow = {
+  url: string;
+  googleMentions: number;
+  chatGptMentions: number;
+};
+
+const latestLlmDay = async (siteId: number, start: string, end: string) => {
+  const rows = await db
+    .select({
+      date: analyticsDailyTable.date,
+      totalMentions: sql<number>`coalesce((${analyticsDailyTable.metrics}->>'totalMentions')::int, 0)`,
+      googleMentions: sql<number>`coalesce((${analyticsDailyTable.metrics}->>'googleMentions')::int, 0)`,
+      chatGptMentions: sql<number>`coalesce((${analyticsDailyTable.metrics}->>'chatGptMentions')::int, 0)`,
+      uniquePrompts: sql<number>`coalesce((${analyticsDailyTable.metrics}->>'uniquePrompts')::int, 0)`,
+      uniqueCitedUrls: sql<number>`coalesce((${analyticsDailyTable.metrics}->>'uniqueCitedUrls')::int, 0)`,
+    })
+    .from(analyticsDailyTable)
+    .where(
+      and(
+        eq(analyticsDailyTable.siteId, siteId),
+        eq(analyticsDailyTable.provider, "llm_mentions"),
+        gte(analyticsDailyTable.date, start),
+        lte(analyticsDailyTable.date, end),
+      ),
+    )
+    .orderBy(desc(analyticsDailyTable.date))
+    .limit(1);
+  return rows[0] ?? null;
+};
+
+export const getLlmMentionsSummary = async (
+  siteId: number,
+  days: number,
+): Promise<LlmMentionsSummary> => {
+  const w = getWindow(days);
+  const [latest, prior] = await Promise.all([
+    latestLlmDay(siteId, w.start, w.end),
+    latestLlmDay(siteId, w.priorStart, w.priorEnd),
+  ]);
+
+  const latestSummary = latest
+    ? {
+        date: latest.date,
+        totalMentions: Number(latest.totalMentions ?? 0),
+        googleMentions: Number(latest.googleMentions ?? 0),
+        chatGptMentions: Number(latest.chatGptMentions ?? 0),
+        uniquePrompts: Number(latest.uniquePrompts ?? 0),
+        uniqueCitedUrls: Number(latest.uniqueCitedUrls ?? 0),
+      }
+    : { date: null, totalMentions: 0, googleMentions: 0, chatGptMentions: 0, uniquePrompts: 0, uniqueCitedUrls: 0 };
+
+  const priorTotal = prior ? Number(prior.totalMentions ?? 0) : 0;
+
+  return {
+    window: { start: w.start, end: w.end },
+    prior: { start: w.priorStart, end: w.priorEnd },
+    latest: latestSummary,
+    priorLatest: { totalMentions: priorTotal },
+    delta: { totalMentions: pct(latestSummary.totalMentions, priorTotal) },
+  };
+};
+
+export const getTopLlmPrompts = async (
+  siteId: number,
+  days: number,
+  limit = 50,
+): Promise<LlmPromptRow[]> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      value: analyticsDimensionTable.value,
+      googleMentions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'googleMentions')::int), 0)`,
+      chatGptMentions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'chatGptMentions')::int), 0)`,
+      aiSearchVolume: sql<number>`coalesce(max((${analyticsDimensionTable.metrics}->>'aiSearchVolume')::int), 0)`,
+      answerSnippet: sql<string>`max(${analyticsDimensionTable.metrics}->>'answerSnippet')`,
+      firstSourceUrl: sql<string | null>`max(${analyticsDimensionTable.metrics}->>'firstSourceUrl')`,
+    })
+    .from(analyticsDimensionTable)
+    .where(
+      and(
+        eq(analyticsDimensionTable.siteId, siteId),
+        eq(analyticsDimensionTable.provider, "llm_mentions"),
+        eq(analyticsDimensionTable.dimension, "prompt"),
+        gte(analyticsDimensionTable.date, w.start),
+        lte(analyticsDimensionTable.date, w.end),
+      ),
+    )
+    .groupBy(analyticsDimensionTable.value)
+    .orderBy(
+      desc(
+        sql`coalesce(sum((${analyticsDimensionTable.metrics}->>'googleMentions')::int), 0) + coalesce(sum((${analyticsDimensionTable.metrics}->>'chatGptMentions')::int), 0)`,
+      ),
+    )
+    .limit(limit);
+
+  return rows.map((r) => ({
+    prompt: r.value,
+    googleMentions: Number(r.googleMentions ?? 0),
+    chatGptMentions: Number(r.chatGptMentions ?? 0),
+    aiSearchVolume: Number(r.aiSearchVolume ?? 0),
+    answerSnippet: r.answerSnippet ?? "",
+    firstSourceUrl: r.firstSourceUrl ?? null,
+  }));
+};
+
+export const getTopLlmCitedUrls = async (
+  siteId: number,
+  days: number,
+  limit = 50,
+): Promise<LlmCitedUrlRow[]> => {
+  const w = getWindow(days);
+  const rows = await db
+    .select({
+      value: analyticsDimensionTable.value,
+      googleMentions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'googleMentions')::int), 0)`,
+      chatGptMentions: sql<number>`coalesce(sum((${analyticsDimensionTable.metrics}->>'chatGptMentions')::int), 0)`,
+    })
+    .from(analyticsDimensionTable)
+    .where(
+      and(
+        eq(analyticsDimensionTable.siteId, siteId),
+        eq(analyticsDimensionTable.provider, "llm_mentions"),
+        eq(analyticsDimensionTable.dimension, "cited_url"),
+        gte(analyticsDimensionTable.date, w.start),
+        lte(analyticsDimensionTable.date, w.end),
+      ),
+    )
+    .groupBy(analyticsDimensionTable.value)
+    .orderBy(
+      desc(
+        sql`coalesce(sum((${analyticsDimensionTable.metrics}->>'googleMentions')::int), 0) + coalesce(sum((${analyticsDimensionTable.metrics}->>'chatGptMentions')::int), 0)`,
+      ),
+    )
+    .limit(limit);
+
+  return rows.map((r) => ({
+    url: r.value,
+    googleMentions: Number(r.googleMentions ?? 0),
+    chatGptMentions: Number(r.chatGptMentions ?? 0),
+  }));
+};
+
 /* ─── Leads (Netlify Forms + future CallRail/WhatConverts) ────────────── */
 
 export type LeadsSummary = {

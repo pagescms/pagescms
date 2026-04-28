@@ -26,6 +26,8 @@ type SettingsPatch = {
   whatconvertsAccountId?: string | null;
   whatconvertsProfileId?: string | null;
   netlifySiteId?: string | null;
+  llmMentionsEnabled?: boolean;
+  llmMentionsCompetitors?: string[];
   digestEnabled?: boolean;
   digestRecipients?: string[];
 };
@@ -92,6 +94,8 @@ export async function PATCH(
       whatconvertsAccountId: body.whatconvertsAccountId ?? undefined,
       whatconvertsProfileId: body.whatconvertsProfileId ?? undefined,
       netlifySiteId: body.netlifySiteId ?? undefined,
+      llmMentionsEnabled: body.llmMentionsEnabled ?? undefined,
+      llmMentionsCompetitors: body.llmMentionsCompetitors ?? undefined,
       digestEnabled: body.digestEnabled ?? undefined,
       digestRecipients: body.digestRecipients ?? undefined,
       updatedAt: new Date(),

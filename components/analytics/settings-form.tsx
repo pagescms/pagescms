@@ -40,6 +40,8 @@ type FormState = {
   whatconvertsAccountId: string;
   whatconvertsProfileId: string;
   netlifySiteId: string;
+  llmMentionsEnabled: boolean;
+  llmMentionsCompetitors: string;
   digestEnabled: boolean;
   digestRecipients: string;
 };
@@ -55,6 +57,8 @@ const toFormState = (site: AnalyticsSiteRow | null): FormState => ({
   whatconvertsAccountId: site?.whatconvertsAccountId ?? "",
   whatconvertsProfileId: site?.whatconvertsProfileId ?? "",
   netlifySiteId: site?.netlifySiteId ?? "",
+  llmMentionsEnabled: site?.llmMentionsEnabled ?? false,
+  llmMentionsCompetitors: (site?.llmMentionsCompetitors ?? []).join(", "),
   digestEnabled: site?.digestEnabled ?? false,
   digestRecipients: (site?.digestRecipients ?? []).join(", "),
 });
@@ -76,6 +80,10 @@ export function AnalyticsSettingsForm({ owner, repo, initialSite }: Props) {
       const body = {
         ...form,
         digestRecipients: form.digestRecipients
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        llmMentionsCompetitors: form.llmMentionsCompetitors
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
@@ -301,6 +309,47 @@ export function AnalyticsSettingsForm({ owner, repo, initialSite }: Props) {
         <CardFooter>
           <Button type="button" variant="outline" size="sm" disabled={testing === "netlify_forms"} onClick={() => handleTest("netlify_forms")}>
             {testing === "netlify_forms" && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+            Test connection
+          </Button>
+        </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Citations (DataForSEO)</CardTitle>
+          <CardDescription>
+            Tracks how often this site is cited inside AI-generated answers. <strong>Coverage limit:</strong>{" "}
+            Google AI Overview (Gemini) and ChatGPT only — Perplexity, Claude, Gemini Direct, and Bing Copilot
+            are not yet available in the DataForSEO LLM Mentions index.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="llmMentionsEnabled"
+              checked={form.llmMentionsEnabled}
+              onCheckedChange={(checked) => update("llmMentionsEnabled", checked)}
+            />
+            <Label htmlFor="llmMentionsEnabled">Sync AI citations daily</Label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="llmMentionsCompetitors">Competitor domains (comma-separated, optional)</Label>
+            <Input
+              id="llmMentionsCompetitors"
+              placeholder="competitor1.com, competitor2.com"
+              value={form.llmMentionsCompetitors}
+              onChange={(e) => update("llmMentionsCompetitors", e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Reserved for future competitor citation comparison. Currently only the primary domain (derived from
+              GSC property) is synced.
+            </p>
+          </div>
+          {renderTestResults("llm_mentions")}
+        </CardContent>
+        <CardFooter>
+          <Button type="button" variant="outline" size="sm" disabled={testing === "llm_mentions"} onClick={() => handleTest("llm_mentions")}>
+            {testing === "llm_mentions" && <Loader className="mr-2 h-4 w-4 animate-spin" />}
             Test connection
           </Button>
         </CardFooter>

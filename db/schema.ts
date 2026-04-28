@@ -204,6 +204,8 @@ const analyticsSiteTable = pgTable("analytics_site", {
   whatconvertsAccountId: text("whatconverts_account_id"),
   whatconvertsProfileId: text("whatconverts_profile_id"),
   netlifySiteId: text("netlify_site_id"),
+  llmMentionsEnabled: boolean("llm_mentions_enabled").notNull().default(false),
+  llmMentionsCompetitors: jsonb("llm_mentions_competitors").notNull().default(sql`'[]'::jsonb`),
   digestEnabled: boolean("digest_enabled").notNull().default(false),
   digestRecipients: jsonb("digest_recipients").notNull().default(sql`'[]'::jsonb`),
   lastSyncedAt: timestamp("last_synced_at"),

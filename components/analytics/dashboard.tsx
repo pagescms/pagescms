@@ -21,6 +21,9 @@ import type {
   LeadsByFormRow,
   LeadsSummary,
   LeadsTimeseriesPoint,
+  LlmCitedUrlRow,
+  LlmMentionsSummary,
+  LlmPromptRow,
   Summary,
   TimeseriesPoint,
   TopRow,
@@ -45,6 +48,7 @@ const TABS = [
   { label: "Search", id: "search" },
   { label: "Traffic", id: "traffic" },
   { label: "Leads", id: "leads" },
+  { label: "AI Citations", id: "ai-citations" },
 ] as const;
 
 const formatNumber = (n: number) => new Intl.NumberFormat("en-US").format(n);
@@ -111,6 +115,12 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
     points: LeadsTimeseriesPoint[];
     byForm: LeadsByFormRow[];
   }>(tab === "leads" ? `${base}/leads?days=${days}` : null, fetcher);
+  const { data: llmData } = useSWR<{
+    enabled: boolean;
+    summary: LlmMentionsSummary | null;
+    prompts: LlmPromptRow[];
+    citedUrls: LlmCitedUrlRow[];
+  }>(tab === "ai-citations" ? `${base}/llm-mentions?days=${days}` : null, fetcher);
 
   const s = summaryData?.summary;
 
@@ -329,6 +339,142 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
               {leadsData === undefined
                 ? "Loading…"
                 : "No leads data yet. Configure a Netlify site ID in Settings."}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "ai-citations" && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Citations</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Counts how often this site&apos;s domain is cited inside AI-generated answers from{" "}
+                <strong>Google AI Overview (Gemini)</strong> and <strong>ChatGPT</strong>. Powered by
+                DataForSEO&apos;s LLM Mentions index. <strong>Coverage limit:</strong> Perplexity, Claude,
+                Gemini Direct, and Bing Copilot are not yet available in this dataset.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {!llmData ? (
+                <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
+                  Loading…
+                </div>
+              ) : !llmData.enabled ? (
+                <div className="h-24 flex items-center justify-center text-center text-muted-foreground text-sm px-4">
+                  AI Citations sync is disabled for this site. Enable it in{" "}
+                  <a className="underline ml-1" href={`/${owner}/${repo}/analytics/settings`}>
+                    Settings
+                  </a>
+                  .
+                </div>
+              ) : !llmData.summary || llmData.summary.latest.totalMentions === 0 ? (
+                <div className="h-24 flex items-center justify-center text-center text-muted-foreground text-sm px-4">
+                  No mentions detected yet. The DataForSEO index updates rolling-30-days; if this site is new,
+                  expect mentions to appear within 4–8 weeks of publishing AI-friendly content.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <KpiCard
+                    label="Total mentions"
+                    value={formatNumber(llmData.summary.latest.totalMentions)}
+                    delta={llmData.summary.priorLatest.totalMentions > 0 ? llmData.summary.delta.totalMentions : null}
+                  />
+                  <KpiCard
+                    label="Google AI Overview"
+                    value={formatNumber(llmData.summary.latest.googleMentions)}
+                    delta={null}
+                  />
+                  <KpiCard
+                    label="ChatGPT"
+                    value={formatNumber(llmData.summary.latest.chatGptMentions)}
+                    delta={null}
+                  />
+                  <KpiCard
+                    label="Unique prompts"
+                    value={formatNumber(llmData.summary.latest.uniquePrompts)}
+                    delta={null}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {llmData?.enabled && llmData.prompts.length > 0 && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top cited prompts</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Prompts where {owner}/{repo} appears as a source. Sorted by total mentions.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground border-b">
+                        <th className="py-2 font-medium">Prompt</th>
+                        <th className="py-2 font-medium text-right">AIO</th>
+                        <th className="py-2 font-medium text-right">ChatGPT</th>
+                        <th className="py-2 font-medium text-right">AI vol.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {llmData.prompts.slice(0, 25).map((p) => (
+                        <tr key={p.prompt} className="border-b last:border-0 align-top">
+                          <td className="py-2 pr-3">
+                            <div className="font-medium leading-tight">{p.prompt}</div>
+                            {p.answerSnippet && (
+                              <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                {p.answerSnippet}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 text-right tabular-nums">{p.googleMentions || "—"}</td>
+                          <td className="py-2 text-right tabular-nums">{p.chatGptMentions || "—"}</td>
+                          <td className="py-2 text-right tabular-nums text-muted-foreground">
+                            {p.aiSearchVolume ? formatNumber(p.aiSearchVolume) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top cited URLs</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pages on this site that AI surfaces cite most often.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground border-b">
+                        <th className="py-2 font-medium">URL</th>
+                        <th className="py-2 font-medium text-right">AIO</th>
+                        <th className="py-2 font-medium text-right">ChatGPT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {llmData.citedUrls.slice(0, 25).map((u) => (
+                        <tr key={u.url} className="border-b last:border-0">
+                          <td className="py-2 pr-3 break-all">
+                            <a className="hover:underline" href={u.url} target="_blank" rel="noopener noreferrer">
+                              {u.url}
+                            </a>
+                          </td>
+                          <td className="py-2 text-right tabular-nums">{u.googleMentions || "—"}</td>
+                          <td className="py-2 text-right tabular-nums">{u.chatGptMentions || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
             </div>
           )}
         </>

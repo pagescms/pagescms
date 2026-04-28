@@ -11,7 +11,8 @@ import * as gsc from "./gsc";
 import * as bing from "./bing";
 import * as ga4 from "./ga4";
 import * as netlifyForms from "./netlify-forms";
-import type { AnalyticsProvider, AnalyticsSiteRow } from "./types";
+import * as llmMentions from "./llm-mentions";
+import type { AnalyticsProvider, AnalyticsSiteRow, LlmPlatform } from "./types";
 
 type ProviderResult = { ok: true; dates?: number; dimensions?: number } | { ok: false; reason: string };
 
@@ -23,6 +24,33 @@ export type SyncResult = {
   bing: ProviderResult | null;
   ga4: ProviderResult | null;
   netlifyForms: ProviderResult | null;
+  llmMentions: ProviderResult | null;
+};
+
+/**
+ * Derive a bare hostname (e.g. "terzoroofing.com") from a site's GSC property.
+ * Supports both `sc-domain:terzoroofing.com` and `https://terzoroofing.com/`.
+ * Returns null if no domain can be derived.
+ */
+const derivePrimaryDomain = (site: AnalyticsSiteRow): string | null => {
+  if (site.gscProperty) {
+    if (site.gscProperty.startsWith("sc-domain:")) {
+      return site.gscProperty.slice("sc-domain:".length).trim() || null;
+    }
+    try {
+      return new URL(site.gscProperty).hostname.replace(/^www\./, "") || null;
+    } catch {
+      // fall through
+    }
+  }
+  if (site.bingSiteUrl) {
+    try {
+      return new URL(site.bingSiteUrl).hostname.replace(/^www\./, "") || null;
+    } catch {
+      // fall through
+    }
+  }
+  return null;
 };
 
 const formatDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -35,7 +63,7 @@ const addDays = (d: Date, days: number) => {
 const upsertDailyRows = async (
   siteId: number,
   provider: AnalyticsProvider,
-  rows: Array<{ date: string; metrics: Record<string, number> }>,
+  rows: Array<{ date: string; metrics: Record<string, unknown> }>,
 ) => {
   if (rows.length === 0) return;
   await db
@@ -52,7 +80,7 @@ const upsertDimensionRows = async (
   provider: AnalyticsProvider,
   date: string,
   dimension: string,
-  rows: Array<{ value: string; metrics: Record<string, number> }>,
+  rows: Array<{ value: string; metrics: Record<string, unknown> }>,
 ) => {
   if (rows.length === 0) return;
   await db
@@ -97,6 +125,7 @@ export const syncSite = async (
     siteId: site.id,
     owner: site.owner,
     repo: site.repo,
+    llmMentions: null,
     gsc: null,
     bing: null,
     ga4: null,
@@ -177,6 +206,105 @@ export const syncSite = async (
         ok: false,
         reason: error instanceof Error ? error.message : "unknown Netlify error",
       };
+    }
+  }
+
+  if (site.llmMentionsEnabled) {
+    const domain = derivePrimaryDomain(site);
+    if (!domain) {
+      result.llmMentions = { ok: false, reason: "Could not derive a primary domain (gscProperty/bingSiteUrl missing or invalid)." };
+    } else {
+      try {
+        const platforms: LlmPlatform[] = ["google", "chat_gpt"];
+        const fetched = await Promise.all(
+          platforms.map((p) => llmMentions.fetchMentions(domain, p, { limit: 500 })),
+        );
+
+        // Aggregate per-prompt counts (the same prompt can appear in both platforms).
+        type PromptAgg = { google: number; chat_gpt: number; aiSearchVolume: number; firstAnswerSnippet: string; firstSourceUrl: string | null };
+        const perPrompt = new Map<string, PromptAgg>();
+        const perCitedUrl = new Map<string, { google: number; chat_gpt: number }>();
+        let totalMentions = 0;
+        let googleMentions = 0;
+        let chatGptMentions = 0;
+
+        for (const { items } of fetched) {
+          for (const item of items) {
+            totalMentions += 1;
+            if (item.platform === "google") googleMentions += 1;
+            if (item.platform === "chat_gpt") chatGptMentions += 1;
+
+            const key = item.question.trim().toLowerCase();
+            if (!key) continue;
+            const existing = perPrompt.get(key) ?? {
+              google: 0,
+              chat_gpt: 0,
+              aiSearchVolume: 0,
+              firstAnswerSnippet: item.answer.slice(0, 280),
+              firstSourceUrl: item.sources[0]?.url ?? null,
+            };
+            existing[item.platform] += 1;
+            if (typeof item.aiSearchVolume === "number" && item.aiSearchVolume > existing.aiSearchVolume) {
+              existing.aiSearchVolume = item.aiSearchVolume;
+            }
+            perPrompt.set(key, existing);
+
+            for (const src of item.sources) {
+              if (!src.url) continue;
+              const u = src.url.toLowerCase();
+              const cu = perCitedUrl.get(u) ?? { google: 0, chat_gpt: 0 };
+              cu[item.platform] += 1;
+              perCitedUrl.set(u, cu);
+            }
+          }
+        }
+
+        await upsertDailyRows(site.id, "llm_mentions", [
+          {
+            date: endDate,
+            metrics: {
+              totalMentions,
+              googleMentions,
+              chatGptMentions,
+              uniquePrompts: perPrompt.size,
+              uniqueCitedUrls: perCitedUrl.size,
+            },
+          },
+        ]);
+
+        const promptRows = [...perPrompt.entries()].map(([prompt, agg]) => ({
+          value: prompt.slice(0, 400),
+          metrics: {
+            googleMentions: agg.google,
+            chatGptMentions: agg.chat_gpt,
+            aiSearchVolume: agg.aiSearchVolume,
+            // Persist a small surrounding context so the dashboard can show *why* the prompt counts.
+            answerSnippet: agg.firstAnswerSnippet,
+            firstSourceUrl: agg.firstSourceUrl,
+          },
+        }));
+        await upsertDimensionRows(site.id, "llm_mentions", endDate, "prompt", promptRows);
+
+        const urlRows = [...perCitedUrl.entries()].map(([url, agg]) => ({
+          value: url.slice(0, 400),
+          metrics: {
+            googleMentions: agg.google,
+            chatGptMentions: agg.chat_gpt,
+          },
+        }));
+        await upsertDimensionRows(site.id, "llm_mentions", endDate, "cited_url", urlRows);
+
+        result.llmMentions = {
+          ok: true,
+          dates: 1,
+          dimensions: promptRows.length + urlRows.length,
+        };
+      } catch (error) {
+        result.llmMentions = {
+          ok: false,
+          reason: error instanceof Error ? error.message : "unknown DataForSEO error",
+        };
+      }
     }
   }
 
