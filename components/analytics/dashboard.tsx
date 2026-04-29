@@ -28,7 +28,9 @@ import type {
   TimeseriesPoint,
   TopRow,
 } from "@/lib/analytics/queries";
+import type { ActivityRow } from "@/lib/analytics/types";
 import { AI_SURFACES } from "@/lib/analytics/ai-sources";
+import { ActivityFeed } from "./activity-feed";
 
 type Props = {
   owner: string;
@@ -45,6 +47,7 @@ const DAY_PRESETS = [
 
 const TABS = [
   { label: "Overview", id: "overview" },
+  { label: "Activity", id: "activity" },
   { label: "Search", id: "search" },
   { label: "Traffic", id: "traffic" },
   { label: "Leads", id: "leads" },
@@ -121,6 +124,10 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
     prompts: LlmPromptRow[];
     citedUrls: LlmCitedUrlRow[];
   }>(tab === "ai-citations" ? `${base}/llm-mentions?days=${days}` : null, fetcher);
+  const { data: activityData } = useSWR<{ entries: ActivityRow[] }>(
+    tab === "activity" ? `${base}/activity?days=${days}` : null,
+    fetcher,
+  );
 
   const s = summaryData?.summary;
 
@@ -340,6 +347,16 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
                 ? "Loading…"
                 : "No leads data yet. Configure a Netlify site ID in Settings."}
             </div>
+          )}
+        </>
+      )}
+
+      {tab === "activity" && (
+        <>
+          {!activityData ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div>
+          ) : (
+            <ActivityFeed entries={activityData.entries} />
           )}
         </>
       )}

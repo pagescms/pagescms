@@ -12,6 +12,7 @@ import * as bing from "./bing";
 import * as ga4 from "./ga4";
 import * as netlifyForms from "./netlify-forms";
 import * as llmMentions from "./llm-mentions";
+import * as activity from "./activity";
 import type { AnalyticsProvider, AnalyticsSiteRow, LlmPlatform } from "./types";
 
 type ProviderResult = { ok: true; dates?: number; dimensions?: number } | { ok: false; reason: string };
@@ -25,6 +26,7 @@ export type SyncResult = {
   ga4: ProviderResult | null;
   netlifyForms: ProviderResult | null;
   llmMentions: ProviderResult | null;
+  activity: ProviderResult | null;
 };
 
 /**
@@ -125,6 +127,7 @@ export const syncSite = async (
     siteId: site.id,
     owner: site.owner,
     repo: site.repo,
+    activity: null,
     llmMentions: null,
     gsc: null,
     bing: null,
@@ -306,6 +309,34 @@ export const syncSite = async (
         };
       }
     }
+  }
+
+  // Activity feed — backfill 30 days on every sync (idempotent via dedup).
+  // GitHub commits + Netlify deploys.
+  try {
+    let activityCount = 0;
+    const sinceDate = new Date();
+    sinceDate.setUTCDate(sinceDate.getUTCDate() - 30);
+    const sinceIso = sinceDate.toISOString();
+
+    activityCount += await activity.syncGithubCommits(site.id, site.owner, site.repo, sinceIso).catch((err) => {
+      console.error(`activity.github failed for ${site.owner}/${site.repo}:`, err);
+      return 0;
+    });
+
+    if (site.netlifySiteId) {
+      activityCount += await activity.syncNetlifyDeploys(site.id, site.netlifySiteId).catch((err) => {
+        console.error(`activity.netlify failed for ${site.owner}/${site.repo}:`, err);
+        return 0;
+      });
+    }
+
+    result.activity = { ok: true, dimensions: activityCount };
+  } catch (error) {
+    result.activity = {
+      ok: false,
+      reason: error instanceof Error ? error.message : "unknown activity sync error",
+    };
   }
 
   await db

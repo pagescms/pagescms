@@ -124,6 +124,47 @@ export type AnalyticsDimensionRow<P extends AnalyticsProvider = AnalyticsProvide
   fetchedAt: Date;
 };
 
+export type ActivityKind =
+  | "blog_published"
+  | "content_updated"
+  | "deploy"
+  | "backlink_gained"
+  | "schema_added"
+  | "citation_built"
+  | "gbp_post"
+  | "photo_added"
+  | "review_response"
+  | "manual";
+
+export type ActivitySource = "github" | "netlify" | "dataforseo" | "agency";
+
+export type ActivityRow = {
+  id: number;
+  siteId: number;
+  date: string;
+  kind: ActivityKind;
+  title: string;
+  description: string | null;
+  url: string | null;
+  source: ActivitySource;
+  metadata: Record<string, unknown>;
+  externalId: string | null;
+  createdAt: Date;
+};
+
+export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
+  blog_published: "Blog post",
+  content_updated: "Content update",
+  deploy: "Deployment",
+  backlink_gained: "Backlink gained",
+  schema_added: "Schema markup",
+  citation_built: "Citation built",
+  gbp_post: "GBP post",
+  photo_added: "Photos added",
+  review_response: "Review response",
+  manual: "Activity",
+};
+
 export const PROVIDER_LABELS: Record<AnalyticsProvider, string> = {
   gsc: "Google Search Console",
   bing: "Bing Webmaster Tools",

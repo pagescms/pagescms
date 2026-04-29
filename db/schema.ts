@@ -253,6 +253,25 @@ const analyticsDimensionTable = pgTable("analytics_dimension", {
   uq_analytics_dimension_row: uniqueIndex("uq_analytics_dimension_row").on(table.siteId, table.provider, table.date, table.dimension, table.value),
 }));
 
+const analyticsActivityTable = pgTable("analytics_activity", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => analyticsSiteTable.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  url: text("url"),
+  source: text("source").notNull(),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  externalId: text("external_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, table => ({
+  uq_analytics_activity_external: uniqueIndex("uq_analytics_activity_external")
+    .on(table.siteId, table.source, table.externalId),
+  idx_analytics_activity_siteId_date: index("idx_analytics_activity_siteId_date")
+    .on(table.siteId, table.date),
+}));
+
 export {
   userTable,
   sessionTable,
@@ -268,5 +287,6 @@ export {
   analyticsSiteTable,
   analyticsCredentialTable,
   analyticsDailyTable,
-  analyticsDimensionTable
+  analyticsDimensionTable,
+  analyticsActivityTable
 };
