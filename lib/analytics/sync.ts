@@ -324,6 +324,11 @@ export const syncSite = async (
       return 0;
     });
 
+    activityCount += await activity.syncScheduledBlogPosts(site.id, site.owner, site.repo, 30).catch((err) => {
+      console.error(`activity.blog_posts failed for ${site.owner}/${site.repo}:`, err);
+      return 0;
+    });
+
     if (site.netlifySiteId) {
       activityCount += await activity.syncNetlifyDeploys(site.id, site.netlifySiteId).catch((err) => {
         console.error(`activity.netlify failed for ${site.owner}/${site.repo}:`, err);

@@ -101,11 +101,15 @@ type Classification = { kind: ActivityKind; title: string; section: string };
 export const classifyCommit = (filenames: string[]): Classification | null => {
   const lower = filenames.map((f) => f.toLowerCase());
 
+  // Blog COMMITS are content updates ("blog post edited: X"). The actual
+  // "blog_published" event lands via syncScheduledBlogPosts on the post's
+  // frontmatter date — most posts are committed weeks ahead of publish via
+  // the scheduled-build cron, so commit date != publish date.
   const blogPath = filenames.find((f) => /(^|\/)src\/blog\//i.test(f));
   if (blogPath || lower.some((p) => p.endsWith("_data/blog.json"))) {
     const slug = blogPath ? blogPath.split("/").pop()?.replace(/\.(md|njk|html)$/i, "") : "";
     const titleSuffix = slug ? `: ${slug.replace(/-/g, " ")}` : "";
-    return { kind: "blog_published", title: `Blog post updated${titleSuffix}`, section: "blog" };
+    return { kind: "content_updated", title: `Blog post edited${titleSuffix}`, section: "blog" };
   }
   if (lower.some((p) => /(^|\/)src\/services\//.test(p) || /(^|\/)_data\/(services|servicelist)/.test(p))) {
     return { kind: "content_updated", title: "Updated services page", section: "services" };
@@ -168,6 +172,87 @@ export const syncGithubCommits = async (
         rawMessage: d.commit.message.slice(0, 500),
       },
       externalId: d.sha,
+    });
+  }
+
+  return await upsertActivity(siteId, rows);
+};
+
+/* ─── Scheduled blog posts (Eleventy frontmatter `date` based) ─────────── */
+//
+// Local-services sites use future-dated blog posts: a post is committed weeks
+// ahead with `date: 2026-04-27T08:00:00-05:00`, and a Monday-cron rebuild
+// publishes it on that date. There's no commit on the publication day, so the
+// commit-based path misses the publish event entirely. This function fills
+// that gap by reading every blog file's frontmatter `date` and creating a
+// `blog_published` entry on the actual publish day.
+//
+// Idempotent via externalId = `blog:<slug>`. Re-runs are safe.
+
+type GithubContentItem = {
+  type: "file" | "dir" | "submodule" | "symlink";
+  name: string;
+  path: string;
+  html_url: string;
+};
+
+type GithubContentFile = GithubContentItem & {
+  content: string;
+  encoding: "base64";
+};
+
+const parseFrontmatterField = (content: string, field: string): string | null => {
+  const re = new RegExp(`^${field}:\\s*["']?(.+?)["']?\\s*$`, "m");
+  return content.match(re)?.[1] ?? null;
+};
+
+export const syncScheduledBlogPosts = async (
+  siteId: number,
+  owner: string,
+  repo: string,
+  windowDays = 30,
+): Promise<number> => {
+  const token = await getInstallationToken(owner, repo);
+  if (!token) return 0;
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const cutoffIso = new Date(Date.now() - windowDays * 86400000).toISOString().slice(0, 10);
+
+  let items: GithubContentItem[];
+  try {
+    items = await githubFetch<GithubContentItem[]>(token, `/repos/${owner}/${repo}/contents/src/blog`);
+  } catch {
+    // No src/blog dir — silently skip
+    return 0;
+  }
+
+  const rows: ActivityInsert[] = [];
+  for (const item of items) {
+    if (item.type !== "file" || !/\.(md|njk)$/.test(item.name)) continue;
+    let file: GithubContentFile;
+    try {
+      file = await githubFetch<GithubContentFile>(token, `/repos/${owner}/${repo}/contents/${item.path}`);
+    } catch {
+      continue;
+    }
+    const content = Buffer.from(file.content, "base64").toString("utf8");
+    const dateRaw = parseFrontmatterField(content, "date");
+    const titleRaw = parseFrontmatterField(content, "title");
+    if (!dateRaw) continue;
+    const postDate = dateRaw.slice(0, 10);
+    // Only insert published-and-recent posts. Future posts still hidden.
+    if (postDate > todayIso || postDate < cutoffIso) continue;
+    const slug = item.name.replace(/\.(md|njk)$/, "");
+    const title = titleRaw ?? slug.replace(/-/g, " ");
+    rows.push({
+      date: postDate,
+      kind: "blog_published",
+      title: `Published article: ${title}`,
+      description: null,
+      url: file.html_url,
+      source: "github",
+      metadata: { slug, frontmatterDate: dateRaw },
+      externalId: `blog:${slug}`,
     });
   }
 
