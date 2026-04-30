@@ -31,6 +31,42 @@ type ActivityInsert = {
   externalId?: string | null;
 };
 
+/**
+ * Build a CMS deep-link for a given activity. Clients have no GitHub access,
+ * so we never show github.com URLs — content updates link into the editor on
+ * cms.pageonelocal.com instead. Returns null for entries that aren't editable
+ * via the CMS (e.g. config tweaks classified as content_updated with no
+ * matching section).
+ *
+ * Convention is hardcoded against the local-seo-site-builder template's
+ * .pages.yml: `posts` collection (src/blog), `service-pages` (src/services),
+ * `service-areas` (src/service-areas), `business-info` file (src/_data/site.json).
+ */
+const CMS_BASE_URL = process.env.NEXT_PUBLIC_CMS_BASE_URL ?? "https://cms.pageonelocal.com";
+
+export const buildCmsUrl = (
+  owner: string,
+  repo: string,
+  kind: ActivityKind,
+  metadata: Record<string, unknown>,
+  branch = "main",
+): string | null => {
+  const base = `${CMS_BASE_URL}/${owner}/${repo}/${branch}`;
+  const slug = typeof metadata.slug === "string" ? metadata.slug : null;
+  const section = typeof metadata.section === "string" ? metadata.section : null;
+
+  if (kind === "blog_published" && slug) {
+    return `${base}/collection/posts/edit/${encodeURIComponent(slug)}.md`;
+  }
+  if (kind === "content_updated") {
+    if (section === "blog") return `${base}/collection/posts`;
+    if (section === "services") return `${base}/collection/service-pages`;
+    if (section === "service_areas") return `${base}/collection/service-areas`;
+    if (section === "site_info") return `${base}/file/business-info`;
+  }
+  return null;
+};
+
 const upsertActivity = async (siteId: number, rows: ActivityInsert[]): Promise<number> => {
   if (rows.length === 0) return 0;
   const inserted = await db
@@ -157,20 +193,22 @@ export const syncGithubCommits = async (
     const filenames = (d.files ?? []).map((f) => f.filename);
     const cls = classifyCommit(filenames);
     if (!cls) continue;
+    const metadata = {
+      section: cls.section,
+      commitSha: d.sha,
+      filesChanged: filenames.length,
+      // Raw commit message kept for agency-side debugging only — UI never surfaces this directly.
+      rawMessage: d.commit.message.slice(0, 500),
+    };
     rows.push({
       date: d.commit.author.date.slice(0, 10),
       kind: cls.kind,
       title: cls.title,
       description: null,
-      url: d.html_url,
+      // No github.com links — clients can't access the repo. Use a CMS deep-link if applicable.
+      url: buildCmsUrl(owner, repo, cls.kind, metadata),
       source: "github",
-      metadata: {
-        section: cls.section,
-        commitSha: d.sha,
-        filesChanged: filenames.length,
-        // Raw commit message kept for agency-side debugging only — UI never surfaces this directly.
-        rawMessage: d.commit.message.slice(0, 500),
-      },
+      metadata,
       externalId: d.sha,
     });
   }
@@ -244,14 +282,15 @@ export const syncScheduledBlogPosts = async (
     if (postDate > todayIso || postDate < cutoffIso) continue;
     const slug = item.name.replace(/\.(md|njk)$/, "");
     const title = titleRaw ?? slug.replace(/-/g, " ");
+    const metadata = { slug, frontmatterDate: dateRaw };
     rows.push({
       date: postDate,
       kind: "blog_published",
       title: `Published article: ${title}`,
       description: null,
-      url: file.html_url,
+      url: buildCmsUrl(owner, repo, "blog_published", metadata),
       source: "github",
-      metadata: { slug, frontmatterDate: dateRaw },
+      metadata,
       externalId: `blog:${slug}`,
     });
   }
