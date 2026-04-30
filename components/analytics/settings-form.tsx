@@ -22,6 +22,7 @@ import type {
   CallTrackingProvider,
 } from "@/lib/analytics/types";
 import { PROVIDER_LABELS } from "@/lib/analytics/types";
+import { GbpConnectCard } from "@/components/analytics/gbp-connect-card";
 
 type Props = {
   owner: string;
@@ -313,6 +314,13 @@ export function AnalyticsSettingsForm({ owner, repo, initialSite }: Props) {
           </Button>
         </CardFooter>
       </Card>
+
+      <GbpConnectCard
+        owner={owner}
+        repo={repo}
+        initialLocationName={initialSite?.gbpLocationName ?? null}
+        initialConnectedAt={initialSite?.gbpConnectedAt ?? null}
+      />
 
       <Card>
         <CardHeader>

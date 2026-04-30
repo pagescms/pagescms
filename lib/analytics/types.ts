@@ -5,7 +5,11 @@ export type AnalyticsProvider =
   | "callrail"
   | "whatconverts"
   | "netlify_forms"
-  | "llm_mentions";
+  | "llm_mentions"
+  | "gbp";
+
+/** Providers that produce time-series metrics rows in analytics_daily / analytics_dimension. */
+export type MetricsProvider = Exclude<AnalyticsProvider, "gbp">;
 
 export type LlmPlatform = "google" | "chat_gpt";
 
@@ -33,6 +37,10 @@ export type AnalyticsSiteRow = {
   whatconvertsAccountId: string | null;
   whatconvertsProfileId: string | null;
   netlifySiteId: string | null;
+  gbpAccountId: string | null;
+  gbpLocationId: string | null;
+  gbpLocationName: string | null;
+  gbpConnectedAt: Date | null;
   llmMentionsEnabled: boolean;
   llmMentionsCompetitors: string[];
   digestEnabled: boolean;
@@ -104,7 +112,7 @@ export type ProviderMetrics = {
   llm_mentions: LlmMentionsMetrics;
 };
 
-export type AnalyticsDailyRow<P extends AnalyticsProvider = AnalyticsProvider> = {
+export type AnalyticsDailyRow<P extends MetricsProvider = MetricsProvider> = {
   id: number;
   siteId: number;
   provider: P;
@@ -113,7 +121,7 @@ export type AnalyticsDailyRow<P extends AnalyticsProvider = AnalyticsProvider> =
   fetchedAt: Date;
 };
 
-export type AnalyticsDimensionRow<P extends AnalyticsProvider = AnalyticsProvider> = {
+export type AnalyticsDimensionRow<P extends MetricsProvider = MetricsProvider> = {
   id: number;
   siteId: number;
   provider: P;
@@ -173,4 +181,5 @@ export const PROVIDER_LABELS: Record<AnalyticsProvider, string> = {
   whatconverts: "WhatConverts",
   netlify_forms: "Netlify Forms",
   llm_mentions: "AI Citations (DataForSEO)",
+  gbp: "Google Business Profile",
 };
