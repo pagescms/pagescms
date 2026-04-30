@@ -185,13 +185,29 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
       {s && tab === "overview" && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard label="Clicks" value={formatNumber(s.current.clicks)} delta={s.delta.clicks} />
-            <KpiCard label="Impressions" value={formatNumber(s.current.impressions)} delta={s.delta.impressions} />
-            <KpiCard label="CTR" value={formatPct(s.current.ctr)} delta={s.delta.ctr} />
+            <KpiCard
+              label="Clicks"
+              value={formatNumber(s.current.clicks)}
+              delta={s.delta.clicks}
+              priorValue={formatNumber(s.previous.clicks)}
+            />
+            <KpiCard
+              label="Impressions"
+              value={formatNumber(s.current.impressions)}
+              delta={s.delta.impressions}
+              priorValue={formatNumber(s.previous.impressions)}
+            />
+            <KpiCard
+              label="CTR"
+              value={formatPct(s.current.ctr)}
+              delta={s.delta.ctr}
+              priorValue={formatPct(s.previous.ctr)}
+            />
             <KpiCard
               label="Avg position"
               value={s.current.position != null ? s.current.position.toFixed(1) : "—"}
               delta={s.delta.position}
+              priorValue={s.previous.position != null ? s.previous.position.toFixed(1) : null}
             />
           </div>
 
@@ -259,7 +275,7 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
                   label="Form submissions"
                   value={formatNumber(leadsData.summary.total)}
                   delta={leadsData.summary.delta}
-                  sublabel={`vs ${formatNumber(leadsData.summary.totalPrior)} prior`}
+                  priorValue={formatNumber(leadsData.summary.totalPrior)}
                 />
                 <KpiCard
                   label="Peak day"
@@ -396,6 +412,11 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
                     label="Total mentions"
                     value={formatNumber(llmData.summary.latest.totalMentions)}
                     delta={llmData.summary.priorLatest.totalMentions > 0 ? llmData.summary.delta.totalMentions : null}
+                    priorValue={
+                      llmData.summary.priorLatest.totalMentions > 0
+                        ? formatNumber(llmData.summary.priorLatest.totalMentions)
+                        : null
+                    }
                   />
                   <KpiCard
                     label="Google AI Overview"
@@ -505,21 +526,25 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
                   label="Sessions"
                   value={formatNumber(trafficData.summary.current.sessions)}
                   delta={trafficData.summary.delta.sessions}
+                  priorValue={formatNumber(trafficData.summary.previous.sessions)}
                 />
                 <KpiCard
                   label="Users"
                   value={formatNumber(trafficData.summary.current.activeUsers)}
                   delta={trafficData.summary.delta.activeUsers}
+                  priorValue={formatNumber(trafficData.summary.previous.activeUsers)}
                 />
                 <KpiCard
                   label="Engagement rate"
                   value={formatPct(trafficData.summary.current.engagementRate)}
                   delta={trafficData.summary.delta.engagementRate}
+                  priorValue={formatPct(trafficData.summary.previous.engagementRate)}
                 />
                 <KpiCard
                   label="Pageviews"
                   value={formatNumber(trafficData.summary.current.screenPageViews)}
                   delta={trafficData.summary.delta.screenPageViews}
+                  priorValue={formatNumber(trafficData.summary.previous.screenPageViews)}
                 />
               </div>
 
