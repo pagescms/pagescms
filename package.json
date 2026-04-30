@@ -5,7 +5,7 @@
   "author": {
     "name": "Ronan Berder"
   },
-  "version": "2.1.4",
+  "version": "2.1.5",
   "private": true,
   "scripts": {
     "setup:github-app": "node scripts/setup-github-app.mjs",

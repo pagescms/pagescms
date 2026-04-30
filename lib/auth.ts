@@ -92,9 +92,7 @@ export const auth = betterAuth({
         return {
           user: {
             id: profile.id,
-            name: profile.name || profile.login || "",
             email: profile.email,
-            image: profile.avatar_url,
             emailVerified,
             ...userMap,
           },
