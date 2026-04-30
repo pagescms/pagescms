@@ -190,6 +190,88 @@ const actionRunTable = pgTable("action_run", {
   idx_action_run_workflowRunId: uniqueIndex("idx_action_run_workflowRunId").on(table.workflowRunId),
 }));
 
+const analyticsSiteTable = pgTable("analytics_site", {
+  id: serial("id").primaryKey(),
+  owner: text("owner").notNull(),
+  repo: text("repo").notNull(),
+  timezone: text("timezone").notNull().default("America/New_York"),
+  gscProperty: text("gsc_property"),
+  bingSiteUrl: text("bing_site_url"),
+  ga4PropertyId: text("ga4_property_id"),
+  callTrackingProvider: text("call_tracking_provider"),
+  callrailAccountId: text("callrail_account_id"),
+  callrailCompanyId: text("callrail_company_id"),
+  whatconvertsAccountId: text("whatconverts_account_id"),
+  whatconvertsProfileId: text("whatconverts_profile_id"),
+  netlifySiteId: text("netlify_site_id"),
+  llmMentionsEnabled: boolean("llm_mentions_enabled").notNull().default(false),
+  llmMentionsCompetitors: jsonb("llm_mentions_competitors").notNull().default(sql`'[]'::jsonb`),
+  digestEnabled: boolean("digest_enabled").notNull().default(false),
+  digestRecipients: jsonb("digest_recipients").notNull().default(sql`'[]'::jsonb`),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, table => ({
+  uq_analytics_site_owner_repo: uniqueIndex("uq_analytics_site_owner_repo").on(table.owner, table.repo),
+}));
+
+const analyticsCredentialTable = pgTable("analytics_credential", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => analyticsSiteTable.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, table => ({
+  uq_analytics_credential_siteId_provider: uniqueIndex("uq_analytics_credential_siteId_provider").on(table.siteId, table.provider),
+}));
+
+const analyticsDailyTable = pgTable("analytics_daily", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => analyticsSiteTable.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  date: text("date").notNull(),
+  metrics: jsonb("metrics").notNull(),
+  fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+}, table => ({
+  uq_analytics_daily: uniqueIndex("uq_analytics_daily").on(table.siteId, table.provider, table.date),
+  idx_analytics_daily_siteId_date: index("idx_analytics_daily_siteId_date").on(table.siteId, table.date),
+}));
+
+const analyticsDimensionTable = pgTable("analytics_dimension", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => analyticsSiteTable.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  date: text("date").notNull(),
+  dimension: text("dimension").notNull(),
+  value: text("value").notNull(),
+  metrics: jsonb("metrics").notNull(),
+  fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+}, table => ({
+  idx_analytics_dimension: index("idx_analytics_dimension").on(table.siteId, table.provider, table.date, table.dimension),
+  uq_analytics_dimension_row: uniqueIndex("uq_analytics_dimension_row").on(table.siteId, table.provider, table.date, table.dimension, table.value),
+}));
+
+const analyticsActivityTable = pgTable("analytics_activity", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => analyticsSiteTable.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  url: text("url"),
+  source: text("source").notNull(),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  externalId: text("external_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, table => ({
+  uq_analytics_activity_external: uniqueIndex("uq_analytics_activity_external")
+    .on(table.siteId, table.source, table.externalId),
+  idx_analytics_activity_siteId_date: index("idx_analytics_activity_siteId_date")
+    .on(table.siteId, table.date),
+}));
+
 export {
   userTable,
   sessionTable,
@@ -201,5 +283,10 @@ export {
   cacheFileTable,
   cacheFileMetaTable,
   cachePermissionTable,
-  actionRunTable
+  actionRunTable,
+  analyticsSiteTable,
+  analyticsCredentialTable,
+  analyticsDailyTable,
+  analyticsDimensionTable,
+  analyticsActivityTable
 };

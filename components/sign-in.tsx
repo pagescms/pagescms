@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { getAuthCallbackURL, getSafeRedirect } from "@/lib/auth-redirect";
+import { brand } from "@/lib/brand";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -104,8 +105,14 @@ export function SignIn() {
   return (
     <div className="min-h-screen p-4 md:p-6 flex justify-center items-center">
       <div className="sm:max-w-[340px] w-full space-y-6">
+        {brand.logoUrl && (
+          <div className="flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={brand.logoUrl} alt={brand.name} className="h-8 w-auto" />
+          </div>
+        )}
         <h1 className="text-lg font-medium tracking-tight text-center">
-          Sign in to Pages CMS
+          Sign in to {brand.name}
         </h1>
         <Button
           type="button"
@@ -158,25 +165,35 @@ export function SignIn() {
             )}
           </Button>
         </form>
-        <p className="text-sm text-muted-foreground">
-          By clicking continue, you agree to our{" "}
-          <a
-            className="underline hover:decoration-muted-foreground/50"
-            href="https://pagescms.org/terms"
-            target="_blank"
-          >
-            Terms of Service
-          </a>{" "}
-          and{" "}
-          <a
-            className="underline hover:decoration-muted-foreground/50"
-            href="https://pagescms.org/privacy"
-            target="_blank"
-          >
-            Privacy Policy
-          </a>
-          .
-        </p>
+        {(brand.termsUrl || brand.privacyUrl) && (
+          <p className="text-sm text-muted-foreground">
+            By clicking continue, you agree to our{" "}
+            {brand.termsUrl && (
+              <>
+                <a
+                  className="underline hover:decoration-muted-foreground/50"
+                  href={brand.termsUrl}
+                  target="_blank"
+                >
+                  Terms of Service
+                </a>
+                {brand.privacyUrl ? " and " : "."}
+              </>
+            )}
+            {brand.privacyUrl && (
+              <>
+                <a
+                  className="underline hover:decoration-muted-foreground/50"
+                  href={brand.privacyUrl}
+                  target="_blank"
+                >
+                  Privacy Policy
+                </a>
+                .
+              </>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );

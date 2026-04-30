@@ -40,3 +40,4 @@ next-env.d.ts
 
 # Database
 local.db
+.env*.local

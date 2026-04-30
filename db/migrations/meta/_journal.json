@@ -85,6 +85,27 @@
       "when": 1775631425720,
       "tag": "0011_nice_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776905672900,
+      "tag": "0012_odd_namor",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777390536789,
+      "tag": "0013_secret_proudstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777481124046,
+      "tag": "0014_shallow_iron_man",
+      "breakpoints": true
     }
   ]
 }

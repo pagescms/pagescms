@@ -1,0 +1,2 @@
+ALTER TABLE "analytics_site" ADD COLUMN "llm_mentions_enabled" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "analytics_site" ADD COLUMN "llm_mentions_competitors" jsonb DEFAULT '[]'::jsonb NOT NULL;

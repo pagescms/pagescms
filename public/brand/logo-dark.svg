@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -10 790 175" width="790" height="175">
+  <g transform="translate(10, 5)">
+    <g transform="translate(10, 95)">
+      <polygon points="85,0 170,32 85,64 0,32" fill="#064e3b" stroke="#065f46" stroke-width="1"/>
+      <line x1="42" y1="16" x2="128" y2="48" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="85" y1="0" x2="85" y2="64" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="21" y1="24" x2="149" y2="40" stroke="#0f766e" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="63" y1="8" x2="63" y2="56" stroke="#0f766e" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <line x1="107" y1="8" x2="107" y2="56" stroke="#0f766e" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <rect x="28" y="18" width="12" height="8" rx="1" fill="#065f46" transform="skewY(10)" opacity="0.5"/>
+      <rect x="50" y="6" width="10" height="7" rx="1" fill="#065f46" transform="skewY(10)" opacity="0.5"/>
+      <rect x="95" y="20" width="14" height="9" rx="1" fill="#065f46" transform="skewY(10)" opacity="0.5"/>
+      <rect x="120" y="30" width="11" height="7" rx="1" fill="#065f46" transform="skewY(10)" opacity="0.5"/>
+      <rect x="40" y="30" width="10" height="8" rx="1" fill="#065f46" transform="skewY(10)" opacity="0.5"/>
+      <rect x="98" y="6" width="12" height="7" rx="1" fill="#065f46" transform="skewY(10)" opacity="0.5"/>
+    </g>
+    <g transform="translate(95, 5)">
+      <path d="M0,75 C-5,60 -38,48 -38,22 C-38,-5 -21,-18 0,-18 C21,-18 38,-5 38,22 C38,48 5,60 0,75 Z" fill="#10b981"/>
+      <text x="0" y="32" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="42" fill="#ffffff">1</text>
+    </g>
+  </g>
+  <text x="215" y="112" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="56" fill="#ffffff" letter-spacing="3">PAGE ONE LOCAL</text>
+</svg>

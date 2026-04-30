@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-analytics",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 13 * * 1"
+    }
+  ]
+}

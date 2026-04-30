@@ -45,23 +45,12 @@ async function main() {
       "Pages CMS is an open source CMS for editing content in GitHub repositories.",
     public: false,
     default_permissions: {
-      administration: "write",
-      actions: "write",
-      checks: "read",
-      statuses: "read",
       contents: "write",
-      email_addresses: "read",
       metadata: "read",
+      emails: "read",
     },
     default_events: [
-      "installation_target",
-      "repository",
       "push",
-      "delete",
-      "check_run",
-      "check_suite",
-      "status",
-      "workflow_run",
     ],
     request_oauth_on_install: false,
     setup_on_update: true,
@@ -69,7 +58,6 @@ async function main() {
     hook_attributes: {
       url: webhookUrl,
       active: true,
-      secret: webhookSecret,
     },
   };
 
@@ -122,6 +110,13 @@ async function main() {
   }
   console.log(`- User authorization callback: ${userAuthorizationCallbackUrl}`);
   console.log(`- Setup URL: ${setupUrl}`);
+  console.log("");
+  console.log("NOTE: GitHub no longer accepts `secret` in hook_attributes via the manifest.");
+  console.log("The app was created without a webhook secret. To finish wiring webhooks:");
+  console.log(`  1. Open https://github.com/settings/apps/${converted.slug}`);
+  console.log(`  2. Scroll to Webhook > Secret and paste the value of GITHUB_APP_WEBHOOK_SECRET:`);
+  console.log(`     ${webhookSecret}`);
+  console.log("  3. Click \"Save changes\".");
   console.log(`- Webhook URL: ${webhookUrl}`);
   console.log("\nNext:");
   console.log("1) Install the app on your target account/repositories.");
