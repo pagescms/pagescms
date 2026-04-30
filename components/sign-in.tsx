@@ -26,8 +26,16 @@ export function SignIn() {
       ? "/sign-in"
       : `/sign-in?redirect=${encodeURIComponent(safeRedirect)}`;
 
+  const getErrorMessage = (value: string) => {
+    if (value.toLowerCase() !== "unable_to_get_user_info") return value;
+    return [
+      "GitHub denied profile access. Re-authorize Pages CMS in GitHub Settings > Applications > Authorized GitHub Apps / Authorized OAuth Apps, then try again.",
+      "https://github.com/settings/applications",
+    ].join(" ");
+  };
+
   useEffect(() => {
-    if (error) toast.error(error);
+    if (error) toast.error(getErrorMessage(error), { duration: 12000 });
   }, [error]);
 
   useEffect(() => {
