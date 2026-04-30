@@ -502,6 +502,19 @@ export function Entry({
     const rootLabel = schema.label || schema.name || name;
 
     if (!path) {
+      const rootPath = normalizePath(schema.path);
+      const parentPath = parent ? normalizePath(parent) : null;
+      const relativePath = parentPath ? getRelativePath(parentPath, rootPath) : null;
+      const segments = relativePath ? relativePath.split("/").filter(Boolean) : [];
+
+      const parentEntries = segments.map((segment, index) => ({
+        name: segment,
+        path: joinPathSegments([rootPath, segments.slice(0, index + 1).join("/")]),
+      }));
+
+      const immediateParent = parentEntries.length > 0 ? parentEntries[parentEntries.length - 1] : null;
+      const middleEntries = parentEntries.length > 1 ? parentEntries.slice(0, -1) : [];
+
       return (
         <>
           {groupTrail.map((group) => (
@@ -520,6 +533,43 @@ export function Entry({
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
+
+          {middleEntries.length > 0 && (
+            <>
+              <BreadcrumbItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex items-center">
+                    <BreadcrumbEllipsis className="h-4 w-4" />
+                    <span className="sr-only">Show hidden segments</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {middleEntries.map((entry) => (
+                      <DropdownMenuItem key={entry.path} asChild>
+                        <Link href={`/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/collection/${encodeURIComponent(name)}?path=${encodeURIComponent(entry.path)}`}>
+                          {entry.name}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+            </>
+          )}
+
+          {immediateParent && (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href={`/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/collection/${encodeURIComponent(name)}?path=${encodeURIComponent(immediateParent.path)}`}>
+                    {immediateParent.name}
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+            </>
+          )}
+
           <BreadcrumbItem className="truncate">
             <BreadcrumbPage className="font-semibold truncate">{displayTitle}</BreadcrumbPage>
           </BreadcrumbItem>
@@ -600,7 +650,7 @@ export function Entry({
         </BreadcrumbItem>
       </>
     );
-  }, [config.branch, config.owner, config.repo, displayTitle, name, path, schema, schemaType]);
+  }, [config.branch, config.owner, config.repo, displayTitle, name, path, parent, schema, schemaType]);
   const isCreationBlocked = !path && schemaType === "collection" && !canCreate;
   const showHeaderActions = error !== "Not found" && !isCreationBlocked;
   const headerActionsNode = useMemo(() => {
