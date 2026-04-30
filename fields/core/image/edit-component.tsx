@@ -47,11 +47,17 @@ type FieldOptions = {
   rename?: boolean | "safe" | "random";
 };
 
-const ImageTeaser = ({ file, config, onRemove }: { 
+const ImageTeaser = ({ file, config, mediaInput, onRemove }: { 
   file: string;
   config: Pick<Config, "owner" | "repo" | "branch">;
+  mediaInput?: string;
   onRemove?: () => void;
 }) => {
+  const normalizedFile = file.replace(/^\.\//, '').replace(/^\//, '');
+  const githubPath = mediaInput && !file.startsWith(mediaInput) && !file.startsWith('http')
+    ? `${mediaInput}/${normalizedFile}`
+    : file;
+
   return (
     <div className="absolute bottom-1 right-1 rounded-md bg-background/95 backdrop-blur-sm">
       <ButtonGroup>
@@ -59,7 +65,7 @@ const ImageTeaser = ({ file, config, onRemove }: {
           <TooltipTrigger asChild>
             <Button type="button" variant="ghost" size="icon-xs" asChild className="text-muted-foreground hover:text-foreground">
               <a
-                href={`https://github.com/${config.owner}/${config.repo}/blob/${config.branch}/${file}`}
+                href={`https://github.com/${config.owner}/${config.repo}/blob/${config.branch}/${githubPath}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="View image on GitHub"
@@ -92,11 +98,12 @@ const ImageTeaser = ({ file, config, onRemove }: {
   )
 };
 
-const SortableItem = ({ id, file, config, media, onRemove, readonly = false }: { 
+const SortableItem = ({ id, file, config, media, mediaInput, onRemove, readonly = false }: { 
   id: string;
   file: string;
   config: Pick<Config, "owner" | "repo" | "branch">;
   media: string;
+  mediaInput?: string;
   onRemove?: () => void;
   readonly?: boolean;
 }) => {
@@ -122,7 +129,7 @@ const SortableItem = ({ id, file, config, media, onRemove, readonly = false }: {
       <div title={file} className={readonly ? undefined : "cursor-move"} {...(!readonly ? attributes : {})} {...(!readonly ? listeners : {})}>
         <Thumbnail name={media} path={file} className="rounded-md w-28 h-28"/>
       </div>
-      <ImageTeaser file={file} config={config} onRemove={onRemove} />
+      <ImageTeaser file={file} config={config} mediaInput={mediaInput} onRemove={onRemove} />
     </div>
   );
 };
@@ -300,6 +307,7 @@ const EditComponent = forwardRef((props: EditorProps, ref: React.Ref<HTMLInputEl
                         file={file.path}
                         config={config}
                         media={mediaConfig.name}
+                        mediaInput={mediaConfig.input}
                         onRemove={isReadonly ? undefined : () => handleRemove(file.id)}
                         readonly={isReadonly}
                       />
@@ -312,7 +320,7 @@ const EditComponent = forwardRef((props: EditorProps, ref: React.Ref<HTMLInputEl
                 <div title={files[0].path}>
                   <Thumbnail name={mediaConfig.name} path={files[0].path} className="rounded-md w-28 h-28"/>
                 </div>
-                <ImageTeaser file={files[0].path} config={config} onRemove={isReadonly ? undefined : () => handleRemove(files[0].id)} />
+                <ImageTeaser file={files[0].path} config={config} mediaInput={mediaConfig.input} onRemove={isReadonly ? undefined : () => handleRemove(files[0].id)} />
               </div>
             )
           )}

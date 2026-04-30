@@ -47,12 +47,18 @@ type FieldOptions = {
   rename?: boolean | "safe" | "random";
 };
 
-const FileTeaser = ({ file, config, onRemove, getFileIcon }: { 
+const FileTeaser = ({ file, config, mediaInput, onRemove, getFileIcon }: { 
   file: string;
   config: Pick<Config, "owner" | "repo" | "branch">;
+  mediaInput?: string;
   onRemove?: () => void;
   getFileIcon: (file: string) => React.ReactNode;
 }) => {
+  const normalizedFile = file.replace(/^\.\//, '').replace(/^\//, '');
+  const githubPath = mediaInput && !file.startsWith(mediaInput) && !file.startsWith('http')
+    ? `${mediaInput}/${normalizedFile}`
+    : file;
+
   return (
     <>
       <div title={file} className="flex items-center gap-x-1 px-2 h-9 rounded-md bg-muted truncate text-sm">
@@ -65,7 +71,7 @@ const FileTeaser = ({ file, config, onRemove, getFileIcon }: {
           <TooltipTrigger asChild>
             <Button type="button" variant="ghost" size="icon" asChild className="text-muted-foreground hover:text-foreground">
               <a
-                href={`https://github.com/${config.owner}/${config.repo}/blob/${config.branch}/${file}`}
+                href={`https://github.com/${config.owner}/${config.repo}/blob/${config.branch}/${githubPath}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`View ${getFileName(file)} on GitHub`}
@@ -98,10 +104,11 @@ const FileTeaser = ({ file, config, onRemove, getFileIcon }: {
   )
 };
 
-const SortableItem = ({ id, file, config, onRemove, getFileIcon, readonly = false }: { 
+const SortableItem = ({ id, file, config, mediaInput, onRemove, getFileIcon, readonly = false }: { 
   id: string;
   file: string;
   config: Pick<Config, "owner" | "repo" | "branch">;
+  mediaInput?: string;
   onRemove?: () => void;
   getFileIcon: (file: string) => React.ReactNode;
   readonly?: boolean;
@@ -132,7 +139,7 @@ const SortableItem = ({ id, file, config, onRemove, getFileIcon, readonly = fals
           </Button>
         )}
         
-        <FileTeaser file={file} config={config} onRemove={onRemove} getFileIcon={getFileIcon} />
+        <FileTeaser file={file} config={config} mediaInput={mediaInput} onRemove={onRemove} getFileIcon={getFileIcon} />
       </div>
     </div>
   );
@@ -351,6 +358,7 @@ const EditComponent = forwardRef((props: EditorProps, ref: React.Ref<HTMLInputEl
                         id={file.id}
                         file={file.path}
                         config={config}
+                        mediaInput={mediaConfig?.input}
                         onRemove={isReadonly ? undefined : () => handleRemove(file.id)}
                         getFileIcon={getFileIcon}
                         readonly={isReadonly}
@@ -361,7 +369,7 @@ const EditComponent = forwardRef((props: EditorProps, ref: React.Ref<HTMLInputEl
               </div>
             ) : (
               <div className="grid grid-cols-[1fr_auto] items-center gap-2 pl-3 pr-1 bg-muted rounded-md h-10">
-                <FileTeaser file={files[0].path} config={config} onRemove={isReadonly ? undefined : () => handleRemove(files[0].id)} getFileIcon={getFileIcon} />
+                <FileTeaser file={files[0].path} config={config} mediaInput={mediaConfig?.input} onRemove={isReadonly ? undefined : () => handleRemove(files[0].id)} getFileIcon={getFileIcon} />
               </div>
             )
           )}
