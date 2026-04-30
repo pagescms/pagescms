@@ -345,6 +345,10 @@ function safeAccess(obj: Record<string, any>, path: string) {
       if (Number.isNaN(parsedIndex)) return undefined;
       return arrayValue[parsedIndex];
     }
+    // If current value is an array and we're accessing a named property, use the first element
+    if (Array.isArray(acc)) {
+      return acc[0]?.[part];
+    }
     return acc && acc[part];
   }, obj);
 }
