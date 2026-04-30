@@ -192,7 +192,6 @@ export function AnalyticsDashboard({ owner, repo }: Props) {
               label="Avg position"
               value={s.current.position != null ? s.current.position.toFixed(1) : "—"}
               delta={s.delta.position}
-              lowerIsBetter
             />
           </div>
 
