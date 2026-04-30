@@ -40,11 +40,11 @@ export function KpiCard({ label, value, delta, lowerIsBetter = false, sublabel, 
         <div className={cn("flex items-center gap-1 text-xs mt-1", tone)}>
           <Icon className="h-3 w-3" />
           <span>{delta == null ? "no prior period" : formatDelta(delta)}</span>
-          {priorValue != null && priorValue !== "" && (
-            <span className="text-muted-foreground ml-1">vs {priorValue}</span>
-          )}
           {sublabel && <span className="text-muted-foreground ml-1">{sublabel}</span>}
         </div>
+        {priorValue != null && priorValue !== "" && (
+          <div className="text-xs text-muted-foreground mt-0.5">Prior period: {priorValue}</div>
+        )}
       </CardContent>
     </Card>
   );
